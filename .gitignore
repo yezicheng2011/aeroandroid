@@ -1,0 +1,16 @@
+work/
+dist/
+macos/.build/
+__pycache__/
+*.pyc
+*.jks
+.DS_Store
+artifacts/
+runtime-cache/
+*.apk
+*.zip
+*.tar.gz
+*.keystore
+.env
+*.log
+surface-token

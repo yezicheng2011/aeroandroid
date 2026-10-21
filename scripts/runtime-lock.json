@@ -1,0 +1,133 @@
+{
+  "android": 16,
+  "host": "macosx",
+  "archives": [
+    {
+      "package": "platforms;android-36",
+      "host": "macosx",
+      "name": "platform-36_r02.zip",
+      "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+      "size": 65878410,
+      "sha1": "2c1a80dd4d9f7d0e6dd336ec603d9b5c55a6f576",
+      "sha256": "37607369a28c5b640b3a7998868d45898ebcb777565a0e85f9acf36f29631d2e",
+      "relative_path": "android16-macos/platform-36_r02.zip"
+    },
+    {
+      "package": "build-tools;36.0.0",
+      "host": "macosx",
+      "name": "build-tools_r36_macosx.zip",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_macosx.zip",
+      "size": 79121749,
+      "sha1": "199ae0047ee61e842f8ee0c6d3918e44fb9a1f83",
+      "sha256": "04e7f3a72044de4926fa038fa0e251a37bba1e1c3fb8beab6f8401bfd9eb4bf3",
+      "relative_path": "android16-macos/build-tools_r36_macosx.zip"
+    },
+    {
+      "package": "cmdline-tools;latest",
+      "host": "macosx",
+      "name": "commandlinetools-mac_arm64-16111833_latest.zip",
+      "url": "https://dl.google.com/android/repository/commandlinetools-mac_arm64-16111833_latest.zip",
+      "size": 155384151,
+      "sha1": "ad03dc49bfacfd52c110b14104ea548b8a07e830",
+      "sha256": "58da8f215781cc0208743e88b65ae259780c55e7eb40e50373d377cf369232d6",
+      "relative_path": "android16-macos/commandlinetools-mac_arm64-16111833_latest.zip"
+    },
+    {
+      "package": "platform-tools",
+      "host": "macosx",
+      "name": "platform-tools_r37.0.1-darwin.zip",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-darwin.zip",
+      "size": 16110554,
+      "sha1": "6ae73f4de6452dc57e62ec02b68eed92a4c21661",
+      "sha256": "ee39ad5967e95c2a07f04dbcbde96b1a0c916ba376096db5d2f498b7727a5d1d",
+      "relative_path": "android16-macos/platform-tools_r37.0.1-darwin.zip"
+    },
+    {
+      "package": "emulator",
+      "host": "macosx",
+      "name": "emulator-darwin_aarch64-16428233.zip",
+      "url": "https://dl.google.com/android/repository/emulator-darwin_aarch64-16428233.zip",
+      "size": 416112708,
+      "sha1": "3af4fe44ce82b3d88ae5678a53735f27ad729c15",
+      "sha256": "f4c4a142bda54fcec064bdb32b51f19e25bae0a45ad019197ef968bf7a48979b",
+      "relative_path": "android16-macos/emulator-darwin_aarch64-16428233.zip"
+    },
+    {
+      "package": "system-images;android-36;default;arm64-v8a",
+      "host": "macosx",
+      "name": "arm64-v8a-36_r02.zip",
+      "url": "https://dl.google.com/android/repository/sys-img/android/arm64-v8a-36_r02.zip",
+      "size": 810736863,
+      "sha1": "62ad6714df790f89c8a8ad32552ffe20bb16fe87",
+      "relative_path": "android16-macos/arm64-v8a-36_r02.zip",
+      "sha256": "c6194eb8ace128b174ea86b5fbc0c78204147123b3b5ce6d0e3d615a06ad31d1"
+    },
+    {
+      "name": "OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.20.1_1.tar.gz",
+      "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.20.1_1.tar.gz",
+      "sha256": "196d13ba5f10414bef7f6a05a9b3f00edacb18ebacef2b99485db9e2ee18f0e8",
+      "host": "macosx",
+      "kind": "jdk",
+      "size": 185851019,
+      "relative_path": "mac-tools/OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.20.1_1.tar.gz"
+    },
+    {
+      "name": "scrcpy-macos-aarch64-v5.0.1.tar.gz",
+      "url": "https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-macos-aarch64-v5.0.1.tar.gz",
+      "sha256": "33611e51977a8289e2e124b220f727895181ef2eb9060e0987a4dc2db9cf0d6b",
+      "host": "macosx",
+      "kind": "scrcpy",
+      "size": 12565912,
+      "relative_path": "mac-tools/scrcpy-macos-aarch64-v5.0.1.tar.gz"
+    },
+    {
+      "name": "cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.12.15%2B20261009-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8",
+      "host": "macosx",
+      "kind": "python",
+      "size": 25165569,
+      "relative_path": "mac-tools/cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz"
+    },
+    {
+      "name": "Magisk-v30.7.apk",
+      "url": "https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk",
+      "sha256": "e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5",
+      "size": 11613864,
+      "kind": "magisk",
+      "relative_path": "provision/Magisk-v30.7.apk"
+    },
+    {
+      "kind": "microg_services",
+      "name": "com.google.android.gms-252432034.apk",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.17.252432/com.google.android.gms-252432034.apk",
+      "size": 108113833,
+      "sha256": "e5e6cba078bdec812b5450599350e5c1a12c8b7438da5bf77123af170f8c1a35",
+      "relative_path": "provision/com.google.android.gms-252432034.apk",
+      "sha1": "c4a5aac93f37fac1223d95617ad4f43c497e39e2",
+      "app_package": "com.google.android.gms",
+      "signer_sha256": "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+    },
+    {
+      "kind": "microg_companion",
+      "name": "com.android.vending-84022634.apk",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.17.252432/com.android.vending-84022634.apk",
+      "size": 4210169,
+      "sha256": "9b8616011cc8f026bcbbe094df850794abb9d6d9f23214d7a8f8c4d1033ea012",
+      "relative_path": "provision/com.android.vending-84022634.apk",
+      "sha1": "019558ff829f42af94846c23b48bec49bb503abb",
+      "app_package": "com.android.vending",
+      "signer_sha256": "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+    },
+    {
+      "kind": "vector",
+      "name": "Vector-v2.2-3080-Release.zip",
+      "url": "https://github.com/JingMatrix/Vector/releases/download/v2.2/Vector-v2.2-3080-Release.zip",
+      "size": 9316843,
+      "sha256": "9ee8323575d615f7b3f1076ff60b2a63a49390ef11881b52632311a37f6f79cc",
+      "relative_path": "provision/Vector-v2.2-3080-Release.zip",
+      "sha1": "dec58ca31ce381d1da0b4bf4953835ea5ac9dcfd"
+    }
+  ],
+  "image_tag": "default"
+}

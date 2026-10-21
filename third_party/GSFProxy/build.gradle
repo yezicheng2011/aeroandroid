@@ -1,0 +1,49 @@
+/*
+ * SPDX-FileCopyrightText: 2013 microG Project Team
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.0.1'
+    }
+}
+
+def versionCode() {
+    def stdout = new ByteArrayOutputStream()
+    exec { commandLine 'git', 'rev-list', '--count', "HEAD"; standardOutput = stdout }
+    return Integer.parseInt(stdout.toString().trim())
+}
+
+def versionName() {
+    def stdout = new ByteArrayOutputStream()
+    if (rootProject.file("gradlew").exists())
+        exec { commandLine 'git', 'describe', '--tags', '--always', '--dirty'; standardOutput = stdout }
+    else // automatic build system, don't tag dirty
+        exec { commandLine 'git', 'describe', '--tags', '--always'; standardOutput = stdout }
+    return stdout.toString().trim().substring(1)
+}
+
+allprojects {
+    apply plugin: 'idea'
+    version = versionName()
+
+    ext.androidBuildVersionTools = "30.0.3"
+
+    ext.appVersionCode = versionCode()
+    ext.androidCompileSdk = 30
+    ext.androidTargetSdk = 24
+    ext.androidMinSdk = 9
+}
+
+subprojects {
+    group = 'org.microg'
+    repositories {
+        mavenCentral()
+        google()
+    }
+}

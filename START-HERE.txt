@@ -1,0 +1,37 @@
+M5 / Apple Silicon · Android Subsystem 0.2.0
+纯 AOSP Android 16 + Magisk + microG
+
+1. 解压 M5-Android16-0.2.0-AOSP-microG.zip。源码和所有离线运行依赖已放在一起：
+
+   M5-Android16-0.2.0-AOSP-microG/
+     Build.command
+     AndroidSubsystem/
+       Build.command
+       Install.command
+       Migrate-to-AOSP.command
+     runtime-cache/
+       android16-macos/
+       mac-tools/
+       provision/
+
+2. 需要 macOS 14 或更新版本、Xcode Command Line Tools，以及至少 20 GB 可用空间。
+   若未安装开发工具，请先运行：xcode-select --install
+3. 双击最外层 Build.command，自动准备离线环境、编译原生应用，
+   配置 Magisk、microG 和签名兼容模块，并安装到 ~/Applications/Android Subsystem.app。
+   Android SDK 使用协议需要你阅读并接受。无需另装 Python、Java 或 Homebrew。
+4. 已有安装会先退出管理应用，用匹配当前配置的后端停止 VM，再备份配置。
+   6 GB 等现有内存设置保留。AOSP 使用独立安卓数据环境，需要重新安装应用；
+   旧用户数据保留为离线备份。新环境配置成功后才删除旧 Google APIs 系统镜像。
+5. 安装后打开 microG 设置的“自检 / Self-Check”，再验证实际需要的应用。
+   默认不自动登录 Google、启用设备注册或推送。详见 docs/MICROG.md。
+
+本包不包含 GApps、Google Play 商店、Chrome 或专有 DroidGuard。
+microG 是开源兼容实现；安装成功不保证所有 GMS 接口或 Play Integrity 可用。
+APK 构建、签名与受控测试已通过，新 AOSP/microG 的 M5 实机验收仍待完成。
+商业分发仍需遵守 SDK 与各开源组件的许可证，详细限制见 README.md。
+
+如果只下载 AndroidSubsystem-source.zip，请另行提供与 runtime-lock.json 匹配的
+runtime-cache；放在源码文件夹旁边或源码内部均可。完整单包不需要另行下载。
+构建成功或失败都会显示日志路径；终端按回车才关闭。
+日志位于 ~/Library/Application Support/AndroidSubsystem/logs/。
+如有问题请提供安装日志；scripts/collect-diagnostics.py 可收集诊断，不会自动上传。

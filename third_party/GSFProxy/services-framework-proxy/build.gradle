@@ -1,0 +1,28 @@
+/*
+ * SPDX-FileCopyrightText: 2014 microG Project Team
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+apply plugin: 'com.android.application'
+
+android {
+    namespace "com.google.android.gsf"
+    compileSdkVersion androidCompileSdk
+    buildToolsVersion "$androidBuildVersionTools"
+
+    defaultConfig {
+        versionName version
+        versionCode appVersionCode
+        minSdkVersion androidMinSdk
+        targetSdkVersion androidTargetSdk
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+if (file('user.gradle').exists()) {
+    apply from: 'user.gradle'
+}

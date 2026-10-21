@@ -1,0 +1,22 @@
+aeroandroid (Android Subsystem for Apple Silicon Macs)
+Copyright 2026 daniel.ye
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components included in this repository:
+- third_party/GSFProxy: microG GsfProxy, commit ff1b9aa3e235904009f1d87113391abb51808af1,
+  https://github.com/microg/GsfProxy — Apache-2.0 (code); CC-BY-SA-4.0 / CC0-1.0 for some
+  docs/artwork as recorded in third_party/GSFProxy/.reuse and LICENSES/.
+
+Third-party components downloaded at build/run time (NOT included here; each keeps its own license):
+- Android SDK emulator, platform, build-tools, cmdline-tools, arm64-v8a system image (Android SDK License / AOSP licenses)
+- OpenJDK 17 (Temurin, GPL-2.0 with Classpath Exception)
+- python-build-standalone CPython 3.12 (PSF License)
+- scrcpy v5.0.1 (Apache-2.0)
+- Magisk v30.7 and its host_patch.sh (GPL-3.0)
+- Vector (LSPosed fork) v2.2 (GPL-3.0)
+- microG GmsCore / Play Store APKs (Apache-2.0 / proprietary respectively)
+
+Not included because they are GPL-3.0 (copyleft) and cannot be relicensed:
+- microg-spoof/ (MicroG Signature Compatibility module, derived from FakeGApps, GPL-3.0-only)
+- third_party/Magisk/host_patch.sh (GPL-3.0)
