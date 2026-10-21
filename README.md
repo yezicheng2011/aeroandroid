@@ -11,6 +11,8 @@ aeroandroid 是一个在 Apple Silicon Mac（M 系列芯片）上运行 Android 
 
 ## 构建与运行
 
+**推荐：** 运行 `./build.sh`（一条命令自主编译，详见 [BUILD.md](BUILD.md)，支持 `--mirror cn`）。
+
 需要 Apple Silicon Mac、macOS 14+，以及联网下载约 1.8 GB 的运行时（Android 模拟器、系统镜像、JDK 等）。
 
 1. 双击 `Build.command`（或在终端运行），它会调用 `scripts/setup-mac.sh` 下载运行时并构建 macOS 应用和 guest APK。
@@ -35,6 +37,8 @@ Apache-2.0，Copyright 2026 daniel.ye。第三方组件见 `NOTICE`。
 aeroandroid is an "Android subsystem" that runs Android 16 on Apple Silicon Macs. It is built on the official Android Emulator with an AOSP arm64 system image and adds a native macOS app (Swift, `macos/`) that shows each Android app as its own Mac window, an Android-side bridge app (Java, `guest/`) for frame transport, IME, notifications and clipboard, a Python controller (`backend/subsystem.py`), install/diagnostic scripts (`scripts/`, `*.command`), and microG support (`third_party/GSFProxy`).
 
 ### Build and run
+
+**Recommended:** run `./build.sh` (one-command self-build; see [BUILD.md](BUILD.md), supports `--mirror cn`).
 
 Requires an Apple Silicon Mac with macOS 14+ and about 1.8 GB of runtime downloads.
 

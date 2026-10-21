@@ -14,3 +14,7 @@ runtime-cache/
 .env
 *.log
 surface-token
+work/
+# fetched by build.sh --with-gpl (GPL-3.0, not part of this repo)
+microg-spoof/
+third_party/Magisk/
