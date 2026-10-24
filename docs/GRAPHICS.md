@@ -1,47 +1,47 @@
-# 图形通路与实现边界
+# Graphics Path and Implementation Boundaries
 
 ## Guest
 
-`SurfaceServer` 由 ADB 用 shell UID 启动，代码从已编译 APK 的 dex 加载。Context 归属 `com.android.shell`，避免用 `android` 包名发出 UID 不匹配的系统调用。该进程负责显示器、Surface、输入注入，普通 APK 内的 Activity 不承担这些系统权限操作。
+`SurfaceServer` is launched by ADB with the shell UID, and its code is loaded from the dex of the compiled APK. Its Context belongs to `com.android.shell`, which avoids making system calls with a mismatched UID under the `android` package name. This process handles displays, Surfaces and input injection; Activities inside the ordinary APK do not perform these privileged system operations.
 
-每个认证连接创建一个 `VirtualDisplay` 和 RGBA8 `ImageReader`，将目标 launcher Activity 启动到该 display。帧从 ImageReader 按行读取，处理 gralloc row stride，按固定顺序写出。不会抓取整个屏幕后裁切应用区域。
+Each authenticated connection creates a `VirtualDisplay` and an RGBA8 `ImageReader`, and launches the target launcher Activity onto that display. Frames are read from the ImageReader row by row, honouring the gralloc row stride, and written out in a fixed order. The whole screen is never captured and then cropped to the app area.
 
-图形连接关闭时释放 VirtualDisplay。resize 在同一图像 Handler 上顺序更换 ImageReader 与显示器 Surface；旧 reader 的回调被忽略。缓冲区数量固定为 3，使用 acquireLatestImage，帧率限制为 15–30 FPS。Surface 会涉及 GPU 到 CPU 的读回，性能需要实测。
+The VirtualDisplay is released when the graphics connection closes. A resize swaps the ImageReader and the display Surface sequentially on the same image Handler; callbacks from the old reader are ignored. The buffer count is fixed at 3, `acquireLatestImage` is used, and the frame rate is limited to 15–30 FPS. The Surface involves a GPU-to-CPU readback, so performance needs to be measured.
 
-独立显示使用可信显示、独立显示组、保持解锁及独立焦点标记；后端在启动前唤醒 Guest。display state、应用启动输出、第一帧与 resize异常写入 surface-bridge.log。异步 resize 的异常回传给 Host并关闭会话，避免抓帧线程退出而窗口仍等待。Guest APK SHA256 纳入服务复用条件，更新后会替换旧服务。
+Separate displays use the trusted-display, own-display-group, keep-unlocked and own-focus flags; the backend wakes the Guest before launching. Display state, app launch output, the first frame and resize exceptions are written to surface-bridge.log. Exceptions from asynchronous resizes are sent back to the Host and the session is closed, so the window never keeps waiting after the frame-capture thread has exited. The Guest APK's SHA256 is part of the service-reuse condition, so the old service is replaced after an update.
 
-输入通过 InputManager / InputManagerGlobal 的 shell 权限注入，每个事件明确指定 displayId。文字经 companion 的受 DUMP 权限保护的 ContentProvider 传给 InputMethodService，支持 Mac 输入法提交 Unicode。焦点、复制、最小化和恢复行为需要在安卓多显示器模式下验证，隐藏 API 在版本变化时可能需要调整。
+Input is injected through InputManager / InputManagerGlobal with shell permissions, and every event specifies its displayId explicitly. Text is passed to the InputMethodService through the companion's DUMP-permission-protected ContentProvider, so committed Unicode from Mac input methods is supported. Focus, copy, minimize and restore behaviour needs to be verified in Android multi-display mode, and hidden APIs may need adjustment when versions change.
 
 ## Wire protocol v1
 
-所有包使用 1 字节类型 + 4 字节大端 payload 长度。
+Every packet uses a 1-byte type + a 4-byte big-endian payload length.
 
-| 类型 | 方向 | 内容 |
+| Type | Direction | Content |
 |---|---|---|
-| 1 | Guest → Host | width u32、height u32、rowBytes u32、timestamp u64、RGBA8 |
-| 3 | Guest → Host | UTF-8 JSON：ready、error、input-warning、clipboard |
-| 16 | Host → Guest | UTF-8 JSON：hello、pointer、scroll、key、text、resize、focus、visibility、clipboard-get、close |
+| 1 | Guest → Host | width u32, height u32, rowBytes u32, timestamp u64, RGBA8 |
+| 3 | Guest → Host | UTF-8 JSON: ready, error, input-warning, clipboard |
+| 16 | Host → Guest | UTF-8 JSON: hello, pointer, scroll, key, text, resize, focus, visibility, clipboard-get, close |
 
-hello 包含协议版本、目标包名、尺寸、DPI、帧率与随机认证 token。host token 位于本地私有数据目录，guest token 位于 shell 所有的 0700 目录里。guest 仅监听其 loopback，host 通过 ADB 分配的 loopback 端口连接。token 不写日志，也不放进命令行参数。
+`hello` contains the protocol version, target package name, size, DPI, frame rate and a random authentication token. The host token lives in the local private data directory, and the guest token in a 0700 directory owned by shell. The guest listens only on its loopback, and the host connects through a loopback port allocated by ADB. Tokens are never logged or passed as command-line arguments.
 
-控制包最多 64 KiB；图形包最多 2560×2560×4+20 字节。Host 检查尺寸、stride 和精确长度，避免根据不可信长度无限分配内存。Host 只排队一个待消费帧，IOSurface 缓冲池最多 4 个在用 buffer。
+Control packets are at most 64 KiB; graphics packets are at most 2560×2560×4+20 bytes. The Host checks dimensions, stride and exact length to avoid unbounded allocation driven by an untrusted length. The Host queues only one pending frame, and the IOSurface buffer pool has at most 4 buffers in use.
 
 ## macOS
 
-`SurfaceWindowController` 为一个安卓应用创建一个 Cocoa NSWindow。`SurfaceConnection` 解析流包；`SurfaceView` 使用 IOSurface-backed CVPixelBufferPool，将帧填入 CPU 可写的缓冲区，再通过 CVMetalTextureCache 导入 Metal。
+`SurfaceWindowController` creates one Cocoa NSWindow per Android app. `SurfaceConnection` parses the stream packets; `SurfaceView` uses an IOSurface-backed CVPixelBufferPool, fills frames into CPU-writable buffers, and imports them into Metal via CVMetalTextureCache.
 
-Guest 字节顺序是 RGBA，CoreVideo buffer 使用 BGRA 格式来获得 Metal 兼容性；fragment shader 执行通道交换。Metal command 完成前保留 buffer 与 texture，避免 GPU 使用已经回收的 IOSurface。窗口缩放回传显示器新尺寸；输入坐标按窗口内容和 guest 帧尺寸映射。
+The Guest byte order is RGBA, while the CoreVideo buffers use BGRA for Metal compatibility; the fragment shader swaps the channels. Buffers and textures are retained until the Metal command completes, so the GPU never uses an IOSurface that has already been recycled. Window resizes send the new display size back; input coordinates are mapped according to the window content and the guest frame size.
 
-窗口及错误回调就绪后才开始连接，首帧成功前保持初始 Surface尺寸。缩放依据窗口点尺寸，最长边限制为1280，避免 Retina 把未压缩数据量放大四倍。20秒无首帧时窗口显示错误；surface-mac.log区分收到RGBA与完成Metal绘制。Drawable尚未就绪时重试保留的静态帧；纹理/编码器失败会明确回传。最小化期间暂停首次绘制超时，恢复时重新计时。用户已反馈旧版本灰屏修复后的 M5 画面正常；新纯 AOSP 镜像仍需重新确认显示、焦点与生命周期。
+The connection starts only once the window and its error callbacks are ready, and the initial Surface size is kept until the first frame succeeds. Scaling is based on the window's point size, with the longest side capped at 1280, so Retina doesn't quadruple the uncompressed data volume. If no first frame arrives within 20 seconds, the window shows an error; surface-mac.log distinguishes between receiving RGBA and finishing the Metal draw. When the drawable isn't ready yet, the retained static frame is retried; texture/encoder failures are reported explicitly. The first-draw timeout is paused while minimized and restarts on restore. The user has reported that the M5 picture is normal after the gray-screen fix in the old version; display, focus and lifecycle still need to be re-confirmed on the new pure AOSP image.
 
-## 零拷贝的下一道关卡
+## The next hurdle: zero-copy
 
-当前协议走复制型 TCP；Mac 内部共享纹理不等于 Guest / Host 共享显存。真正零拷贝需要：
+The current protocol uses copying TCP; shared textures inside the Mac are not the same as Guest / Host shared video memory. True zero-copy requires:
 
-1. host 为每个应用 buffer 提供可映射的共享内存 / GPU blob，定义注册、释放、生命周期和 stride / format 信息。
-2. 虚拟设备将该 buffer 引用与 guest DMA / GPU buffer 关联；修改 guest 图形 allocator / composer 与 host 图形后端，不能仅修改 APK。
-3. 跨 VM 传递同步 fence，保证 guest 写入、host Metal 采样、复用三个阶段不冲突。
-4. 按 display / application 路由 compositor 输出，处理 secure content、多窗口切换和热重建。
-5. 在 M5 上验证 HVF 内存映射、gfxstream / ANGLE / Metal 导出路径与系统镜像支持。
+1. The host provides mappable shared memory / GPU blobs for each app buffer, defining registration, release, lifecycle and stride / format information.
+2. The virtual device associates that buffer reference with the guest DMA / GPU buffer; this requires changes to the guest graphics allocator / composer and the host graphics backend — modifying the APK alone is not enough.
+3. Sync fences are passed across the VM so that guest writes, host Metal sampling and reuse never conflict.
+4. Compositor output is routed per display / application, handling secure content, multi-window switching and hot rebuilds.
+5. HVF memory mapping, the gfxstream / ANGLE / Metal export path and system-image support are verified on the M5.
 
-本版本没有把这些未实现的步骤包装成已工作的接口。原始帧通路提供一个可观察、可测量的显示和输入基线，后续可以替换传输层而保留原生窗口、输入和应用管理。
+This version does not dress up these unimplemented steps as working interfaces. The raw frame path provides an observable, measurable display and input baseline; the transport layer can later be replaced while keeping the native windows, input and app management.

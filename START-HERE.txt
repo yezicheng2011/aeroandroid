@@ -1,7 +1,7 @@
 M5 / Apple Silicon · Android Subsystem 0.2.0
-纯 AOSP Android 16 + Magisk + microG
+Pure AOSP Android 16 + Magisk + microG
 
-1. 解压 M5-Android16-0.2.0-AOSP-microG.zip。源码和所有离线运行依赖已放在一起：
+1. Unzip M5-Android16-0.2.0-AOSP-microG.zip. The source code and all offline runtime dependencies are bundled together:
 
    M5-Android16-0.2.0-AOSP-microG/
      Build.command
@@ -14,24 +14,25 @@ M5 / Apple Silicon · Android Subsystem 0.2.0
        mac-tools/
        provision/
 
-2. 需要 macOS 14 或更新版本、Xcode Command Line Tools，以及至少 20 GB 可用空间。
-   若未安装开发工具，请先运行：xcode-select --install
-3. 双击最外层 Build.command，自动准备离线环境、编译原生应用，
-   配置 Magisk、microG 和签名兼容模块，并安装到 ~/Applications/Android Subsystem.app。
-   Android SDK 使用协议需要你阅读并接受。无需另装 Python、Java 或 Homebrew。
-4. 已有安装会先退出管理应用，用匹配当前配置的后端停止 VM，再备份配置。
-   6 GB 等现有内存设置保留。AOSP 使用独立安卓数据环境，需要重新安装应用；
-   旧用户数据保留为离线备份。新环境配置成功后才删除旧 Google APIs 系统镜像。
-5. 安装后打开 microG 设置的“自检 / Self-Check”，再验证实际需要的应用。
-   默认不自动登录 Google、启用设备注册或推送。详见 docs/MICROG.md。
+2. You need macOS 14 or later, the Xcode Command Line Tools, and at least 20 GB of free space.
+   If the developer tools are not installed, run first: xcode-select --install
+3. Double-click the top-level Build.command. It prepares the offline environment, builds the native app,
+   configures Magisk, microG and the signature-compatibility module, and installs to ~/Applications/Android Subsystem.app.
+   You will need to read and accept the Android SDK license. No separate Python, Java or Homebrew install is needed.
+4. For an existing installation, it first quits the manager app, stops the VM using the backend that matches the
+   current configuration, and then backs up the configuration. Existing memory settings such as 6 GB are kept.
+   AOSP uses a separate Android data environment, so apps need to be reinstalled; old user data is kept as an
+   offline backup. The old Google APIs system image is deleted only after the new environment is configured successfully.
+5. After installing, open "Self-Check" in microG settings, then verify the apps you actually need.
+   By default it does not sign in to Google or enable device registration or push messaging. See docs/MICROG.md.
 
-本包不包含 GApps、Google Play 商店、Chrome 或专有 DroidGuard。
-microG 是开源兼容实现；安装成功不保证所有 GMS 接口或 Play Integrity 可用。
-APK 构建、签名与受控测试已通过，新 AOSP/microG 的 M5 实机验收仍待完成。
-商业分发仍需遵守 SDK 与各开源组件的许可证，详细限制见 README.md。
+This package does not include GApps, the Google Play Store, Chrome or the proprietary DroidGuard.
+microG is an open-source compatibility implementation; a successful install does not guarantee that every GMS API or Play Integrity works.
+APK build, signing and controlled testing have passed; on-device acceptance of the new AOSP/microG build on an M5 is still pending.
+Commercial distribution must still comply with the SDK and each open-source component's license; see README.md for details.
 
-如果只下载 AndroidSubsystem-source.zip，请另行提供与 runtime-lock.json 匹配的
-runtime-cache；放在源码文件夹旁边或源码内部均可。完整单包不需要另行下载。
-构建成功或失败都会显示日志路径；终端按回车才关闭。
-日志位于 ~/Library/Application Support/AndroidSubsystem/logs/。
-如有问题请提供安装日志；scripts/collect-diagnostics.py 可收集诊断，不会自动上传。
+If you only downloaded AndroidSubsystem-source.zip, provide a runtime-cache that matches runtime-lock.json;
+it can sit next to the source folder or inside it. The full single package needs no extra downloads.
+The log path is shown whether the build succeeds or fails; press Enter in Terminal to close.
+Logs are in ~/Library/Application Support/AndroidSubsystem/logs/.
+If you run into problems, please provide the install log; scripts/collect-diagnostics.py collects diagnostics and never uploads anything automatically.

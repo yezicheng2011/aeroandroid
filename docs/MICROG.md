@@ -1,55 +1,55 @@
-# 纯 AOSP Android 16 与 microG
+# Pure AOSP Android 16 and microG
 
-本版本使用 `system-images;android-36;default;arm64-v8a` 纯 AOSP 镜像。microG Services / Companion 是开源 Google API 兼容实现，使用 `com.google.android.gms` 和 `com.android.vending` 兼容包名。它们不是 Google 官方 Play 服务或 Play 商店，也不提供商店的应用目录。GSFProxy 转发旧版 GSF 广播接口。
+This version uses the pure AOSP image `system-images;android-36;default;arm64-v8a`. microG Services / Companion are open-source implementations compatible with Google APIs, using the compatible package names `com.google.android.gms` and `com.android.vending`. They are not Google's official Play services or Play Store, and they do not provide the store's app catalogue. GSFProxy forwards the legacy GSF broadcast interface.
 
-不附带 GApps、Google Chrome 或专有 DroidGuard。不会自动登录账号、启用 Google 设备注册或云端推送。需要网络服务时，由用户在 microG 设置中明确选择；安装成功不会代表 Play Integrity、DRM、银行软件、游戏反作弊或所有 Google API 可用。
+GApps, Google Chrome and the proprietary DroidGuard are not included. No account is signed in automatically, and Google device registration and cloud push messaging are not enabled automatically. When network services are needed, the user chooses them explicitly in microG settings; a successful install does not mean Play Integrity, DRM, banking apps, game anti-cheat or every Google API will work.
 
-## 安装配置
+## Installation and configuration
 
-`Build.command` / `Install.command` 按顺序完成纯 AOSP 安装、Mac 编译、Magisk 和 microG。已有 Google 镜像版本可运行 `Migrate-to-AOSP.command`。迁移前退出旧管理应用，并使用旧后端停止旧 VM，之后才修改配置。6 GB 等现有内存设置保留。新 AVD 隔离旧 userdata，旧应用需重新安装，旧数据保留为离线备份；不会把旧 Google 系统的包数据库混入纯 AOSP。
+`Build.command` / `Install.command` perform, in order, the pure AOSP install, the Mac build, Magisk and microG. If you have the earlier Google-image version, run `Migrate-to-AOSP.command`. Before migrating, it quits the old manager app and stops the old VM with the old backend, and only then changes the configuration. Existing memory settings such as 6 GB are kept. The new AVD isolates the old userdata; old apps need to be reinstalled, and old data is kept as an offline backup. The old Google system's package database is never merged into pure AOSP.
 
-依赖归档和源码产物均按 SHA256 锁定。microG APK 用实际 `aapt2` manifest、版本和 `apksigner` 证书检查；已安装的同名包也检查真实 APK 证书，拒绝与专有 Google 包混装。
+Dependency archives and source artifacts are all pinned by SHA256. microG APKs are checked using their actual `aapt2` manifest, version and `apksigner` certificate; already-installed packages with the same name are also checked against their real APK certificate, and mixing with proprietary Google packages is refused.
 
-`mac_microg_api36` Magisk 模块安装 Services、Companion、GSFProxy 到 `system/priv-app`。权限 XML 仅允许 APK 实际申请且运行中 AOSP 定义为 privileged 的权限。普通危险权限仍由 Android 用户授权，安装器不自动打开设备注册、推送或账号。
+The `mac_microg_api36` Magisk module installs Services, Companion and GSFProxy into `system/priv-app`. The permissions XML only allows permissions that the APKs actually request and that the running AOSP defines as privileged. Ordinary dangerous permissions are still granted by the Android user; the installer does not automatically turn on device registration, push messaging or accounts.
 
-Zygisk 配置通过 Magisk SQLite 写入并读取确认。官方 Vector 模块启用自有 `dev.dan.androidsubsystem.microgspoof`，scope 固定为 `system/0`。使用官方 JSON CLI 检查具体 `Failed`、启用状态和 scope，再冷启动。兼容模块只对具有真实 microG 证书的 Services / Companion 返回所需兼容签名，保留原包可见性与权限检查，不允许任意应用伪装成 Google 包。
+The Zygisk setting is written via Magisk's SQLite database and read back to confirm. The official Vector module enables our own `dev.dan.androidsubsystem.microgspoof`, with the scope fixed to `system/0`. The official JSON CLI is used to check for specific `Failed` states, the enabled state and the scope, followed by a cold boot. The compatibility module returns the required compatible signature only to Services / Companion that carry the real microG certificate, keeps the original package visibility and permission checks, and does not let arbitrary apps impersonate Google packages.
 
-## 自动检查能证明什么
+## What the automated checks prove
 
-本机 `microg-report.json` 分开记录：
+The local `microg-report.json` records the following separately:
 
-- `installed`：已安装 APK 路径、真实签名证书和版本。
-- `modules_verified`：Magisk 模块存在且未禁用、Vector 启用状态和精确 scope。
-- `signature_checked`：只有 Android 里真正运行 SignatureProbe、两包所有检查通过时才为 true。
-- `signature_check`：GET_SIGNATURES、GET_SIGNING_CERTIFICATES、原始及 SHA256 证书查询、错误证书拒绝的结果。
-- `m5_self_check_required`：仍需界面自检与真实应用验收。signature_checked 不表示所有 Google API 已实现。
+- `installed`: installed APK paths, real signing certificates and versions.
+- `modules_verified`: the Magisk module exists and is not disabled, plus the Vector enabled state and exact scope.
+- `signature_checked`: true only when SignatureProbe actually ran inside Android and every check passed for both packages.
+- `signature_check`: results of GET_SIGNATURES, GET_SIGNING_CERTIFICATES, raw and SHA256 certificate queries, and rejection of a wrong certificate.
+- `m5_self_check_required`: the UI self-check and real-app acceptance are still needed. `signature_checked` does not mean every Google API is implemented.
 
-如果签名检查失败，安装器写出失败报告并退出，不会只凭包存在报告成功。报告位置：
+If the signature check fails, the installer writes a failure report and exits; it never reports success merely because the packages exist. Report location:
 
 ```text
 ~/Library/Application Support/AndroidSubsystem/microg-report.json
 ```
 
-在项目目录重新运行检查：
+To rerun the checks from the project directory:
 
 ```bash
 "$HOME/Library/Application Support/AndroidSubsystem/runtime/python/bin/python3" scripts/provision-microg.py --verify-only
 ```
 
-## M5 上的手动自检
+## Manual self-check on the M5
 
-1. 打开安卓子系统，启动后从应用库打开 microG 设置，进入“自检 / Self-Check”。检查 Services 安装、系统权限和签名兼容项。先保留结果，不要为消除可选项提示自动打开账号、注册或推送。
-2. 若提示定位、通知或联系人权限，按所需应用的功能在 Android 设置中选择授权。不同 AOSP 版本可能显示不同检查项。
-3. 完全停止并重新启动两次，检查 Magisk、Vector 和 microG 仍生效，重新运行自动检查。
-4. 安装你实际需要的 ARM64 / Java APK，分别测试登录、网络、通知、定位及独立窗口。纯 AOSP 不预装 Chrome 和 Google Play；可安装所需的合法 APK或开源浏览器。
-5. 若应用依赖 microG 尚未实现的接口或需要 Play Integrity，记录具体应用和错误，避免把“安装成功”当作兼容性保证。
+1. Open Android Subsystem, and after it starts, open microG Settings from the app library and go to "Self-Check". Check the Services install, system permissions and signature-compatibility items. Keep the results as they are first — don't turn on accounts, registration or push messaging just to clear optional warnings.
+2. If it asks for location, notification or contacts permissions, grant them in Android Settings according to what the apps you need actually require. Different AOSP versions may show different check items.
+3. Fully stop and restart twice, check that Magisk, Vector and microG still work, and rerun the automated checks.
+4. Install the ARM64 / Java APKs you actually need and test sign-in, network, notifications, location and separate windows for each. Pure AOSP has no preinstalled Chrome or Google Play; install the legitimate APKs or an open-source browser you need.
+5. If an app depends on interfaces microG hasn't implemented yet or needs Play Integrity, record the specific app and error; don't treat "installed successfully" as a compatibility guarantee.
 
-Mac 图形窗口继续使用现有 SurfaceServer → RGBA → Metal 通路。新的镜像和签名钩子必须在 M5 上实测；Linux mock 和主机 APK 检查不能代替这些结果。
+The Mac graphics windows continue to use the existing SurfaceServer → RGBA → Metal path. The new image and signature hook must be tested on the M5; Linux mocks and host-side APK checks cannot replace those results.
 
-## 许可与来源
+## Licenses and sources
 
-- [microG GmsCore](https://github.com/microg/GmsCore)：Services / Companion 对应源码与许可证。
-- [microG GSFProxy](https://github.com/microg/GSFProxy)：本包保留所用源码与 Apache 2.0 许可证。
-- [Magisk v30.7](https://github.com/topjohnwu/Magisk/tree/v30.7)：官方修补与模块工具，GPLv3。
-- [Vector v2.2](https://github.com/JingMatrix/Vector/tree/v2.2)：官方 Zygisk / Xposed 框架及 CLI；分发时须按其许可证提供对应源码。
-- [Android SDK 协议](https://developer.android.com/studio/terms)和各运行时组件的许可证仍需分别遵守。移除 GApps 并不等于已经完成商业再分发授权审查。
+- [microG GmsCore](https://github.com/microg/GmsCore): source code and license for Services / Companion.
+- [microG GSFProxy](https://github.com/microg/GSFProxy): this package keeps the source used and its Apache 2.0 license.
+- [Magisk v30.7](https://github.com/topjohnwu/Magisk/tree/v30.7): official patching and module tools, GPLv3.
+- [Vector v2.2](https://github.com/JingMatrix/Vector/tree/v2.2): the official Zygisk / Xposed framework and CLI; when distributing, the corresponding source must be provided as its license requires.
+- The [Android SDK terms](https://developer.android.com/studio/terms) and the licenses of each runtime component must still be followed separately. Removing GApps does not mean a review for commercial redistribution has been completed.
