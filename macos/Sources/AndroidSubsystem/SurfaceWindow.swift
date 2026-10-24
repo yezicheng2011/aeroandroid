@@ -81,7 +81,7 @@ final class SurfaceConnection {
             if let data { packet.data.append(data) }
             if packet.data.count == count { completion(packet.data) }
             else if let error { self.fail(error.localizedDescription) }
-            else if complete { self.fail("安卓图形连接已关闭") }
+            else if complete { self.fail(L10n.t("gfx.closed")) }
             else { self.readExact(count, buffer: packet, completion: completion) }
         }
     }
@@ -90,7 +90,7 @@ final class SurfaceConnection {
             guard let self else { return }
             let type = header[header.startIndex], count = Int(header.u32(at: 1))
             guard count > 0, count <= SurfaceFrame.maximumPayload,
-                  type == 1 || (type == 3 && count <= 65536) else { self.fail("图形协议帧无效"); return }
+                  type == 1 || (type == 3 && count <= 65536) else { self.fail(L10n.t("gfx.bad_frame")); return }
             self.readExact(count) { [weak self] payload in
                 guard let self else { return }
                 do {
@@ -104,7 +104,7 @@ final class SurfaceConnection {
                         }
                     } else {
                         guard let event = try JSONSerialization.jsonObject(with: payload) as? [String: Any] else {
-                            throw BridgeFailure(message: "图形控制消息无效")
+                            throw BridgeFailure(message: L10n.t("gfx.bad_control"))
                         }
                         DispatchQueue.main.async { [weak self] in self?.onEvent?(event) }
                         self.readHeader()
@@ -144,14 +144,14 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
     private var drawRetry: DispatchWorkItem?
     private var drawRetries = 0
     private var displayFailed = false
-    private let statusLabel = NSTextField(labelWithString: "正在连接安卓应用…")
+    private let statusLabel = NSTextField(labelWithString: L10n.t("gfx.connecting"))
     var onRendered: (() -> Void)?
 
     init(graphicsDevice: MTLDevice?) throws {
-        guard let gpu = graphicsDevice else { throw BridgeFailure(message: "无法创建 Metal 设备") }
+        guard let gpu = graphicsDevice else { throw BridgeFailure(message: L10n.t("gfx.no_metal")) }
         super.init(frame: .zero, device: gpu)
         commandQueue = gpu.makeCommandQueue()
-        guard commandQueue != nil else { throw BridgeFailure(message: "无法创建 Metal 命令队列") }
+        guard commandQueue != nil else { throw BridgeFailure(message: L10n.t("gfx.no_queue")) }
         colorPixelFormat = .bgra8Unorm
         framebufferOnly = true; autoResizeDrawable = true
         isPaused = true; enableSetNeedsDisplay = false
@@ -159,7 +159,7 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
         delegate = self
         let cacheStatus = CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, gpu, nil, &textureCache)
         guard cacheStatus == kCVReturnSuccess, textureCache != nil else {
-            throw BridgeFailure(message: "无法创建 Metal 纹理缓存（\(cacheStatus)）")
+            throw BridgeFailure(message: L10n.t("gfx.no_cache", cacheStatus))
         }
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
@@ -216,27 +216,27 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
                     kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
                 let status = CVPixelBufferPoolCreate(kCFAllocatorDefault,
                     [kCVPixelBufferPoolMinimumBufferCountKey as String: 3] as CFDictionary, attributes as CFDictionary, &pool)
-                guard status == kCVReturnSuccess else { throw BridgeFailure(message: "无法创建 IOSurface 图形缓冲池") }
+                guard status == kCVReturnSuccess else { throw BridgeFailure(message: L10n.t("gfx.no_pool")) }
                 dimensions = CGSize(width: CGFloat(frame.width), height: CGFloat(frame.height))
             }
             var buffer: CVPixelBuffer?
-            guard let pool else { throw BridgeFailure(message: "IOSurface 缓冲池缺失") }
+            guard let pool else { throw BridgeFailure(message: L10n.t("gfx.pool_missing")) }
             let bufferStatus = CVPixelBufferPoolCreatePixelBufferWithAuxAttributes(kCFAllocatorDefault, pool,
                 [kCVPixelBufferPoolAllocationThresholdKey as String: 4] as CFDictionary, &buffer)
             if bufferStatus == kCVReturnWouldExceedAllocationThreshold { return }
             guard bufferStatus == kCVReturnSuccess, let buffer else {
-                throw BridgeFailure(message: "无法分配 IOSurface 缓冲（\(bufferStatus)）")
+                throw BridgeFailure(message: L10n.t("gfx.no_buffer", bufferStatus))
             }
             let lockStatus = CVPixelBufferLockBaseAddress(buffer, [])
-            guard lockStatus == kCVReturnSuccess else { throw BridgeFailure(message: "无法访问图形像素（\(lockStatus)）") }
+            guard lockStatus == kCVReturnSuccess else { throw BridgeFailure(message: L10n.t("gfx.no_pixels", lockStatus)) }
             guard let base = CVPixelBufferGetBaseAddress(buffer) else {
                 CVPixelBufferUnlockBaseAddress(buffer, [])
-                throw BridgeFailure(message: "IOSurface 像素地址为空")
+                throw BridgeFailure(message: L10n.t("gfx.null_pixels"))
             }
             let stride = CVPixelBufferGetBytesPerRow(buffer)
             guard stride >= frame.rowBytes else {
                 CVPixelBufferUnlockBaseAddress(buffer, [])
-                throw BridgeFailure(message: "IOSurface 行宽无效")
+                throw BridgeFailure(message: L10n.t("gfx.bad_stride"))
             }
             frame.pixels.withUnsafeBytes { bytes in
                 guard let source = bytes.baseAddress else { return }
@@ -262,15 +262,15 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
             }
             return
         }
-        guard let command = commandQueue.makeCommandBuffer() else { reportError?("无法创建 Metal 绘制命令"); return }
+        guard let command = commandQueue.makeCommandBuffer() else { reportError?(L10n.t("gfx.no_command")); return }
         var texture: CVMetalTexture?
         let status = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, buffer, nil,
             .bgra8Unorm, CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer), 0, &texture)
         guard status == kCVReturnSuccess, let texture, let metalTexture = CVMetalTextureGetTexture(texture) else {
-            reportError?("安卓像素已收到，但无法创建 Metal 纹理（\(status)）"); return
+            reportError?(L10n.t("gfx.no_texture", status)); return
         }
         guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else {
-            reportError?("无法创建 Metal 绘制编码器"); return
+            reportError?(L10n.t("gfx.no_encoder")); return
         }
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentTexture(metalTexture, index: 0)
@@ -280,7 +280,7 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
         // Keep the IOSurface and its texture alive until the GPU completes this submission.
         command.addCompletedHandler { [weak self] completed in
             _ = buffer; _ = texture
-            let failure = completed.status == .error ? (completed.error?.localizedDescription ?? "Metal 绘制失败") : nil
+            let failure = completed.status == .error ? (completed.error?.localizedDescription ?? L10n.t("gfx.draw_failed")) : nil
             DispatchQueue.main.async {
                 guard let self else { return }
                 if let failure { self.reportError?(failure) }
@@ -381,7 +381,7 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
     var onError: ((String) -> Void)?
     init(app: AndroidApp, session: [String: Any]) throws {
         guard let rawPort = session["port"] as? Int, (1024...65535).contains(rawPort) else {
-            throw BridgeFailure(message: "图形端口无效")
+            throw BridgeFailure(message: L10n.t("gfx.bad_port"))
         }
         package = app.package; transport = SurfaceConnection(port: UInt16(rawPort))
         surface = try SurfaceView(graphicsDevice: MTLCreateSystemDefaultDevice())
@@ -402,7 +402,7 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
             if !self.receivedFrame {
                 self.receivedFrame = true
                 SurfaceLog.write("\(self.package) first RGBA frame \(frame.width)x\(frame.height)")
-                self.surface.showStatus("已收到安卓画面，正在绘制…")
+                self.surface.showStatus(L10n.t("gfx.drawing"))
             }
             self.surface.present(frame)
         }
@@ -418,10 +418,10 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
             }
             if event["event"] as? String == "ready", let self, !self.failed {
                 SurfaceLog.write("\(self.package) Guest display ready: \(event["display"] ?? "unknown")")
-                if !self.receivedFrame { self.surface.showStatus("安卓应用已启动，正在等待画面…") }
+                if !self.receivedFrame { self.surface.showStatus(L10n.t("gfx.waiting")) }
             }
             if event["event"] as? String == "error" || event["event"] as? String == "input-warning" {
-                let message = event["message"] as? String ?? "安卓桥接错误"
+                let message = event["message"] as? String ?? L10n.t("gfx.bridge_error")
                 if event["event"] as? String == "error" { self?.showFailure(message) }
                 else { self?.onError?(message) }
             }
@@ -440,8 +440,8 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
         firstFrameTimeout?.cancel()
         let timeout = DispatchWorkItem { [weak self] in
             guard let self, !self.renderedFrame, !self.failed, self.window?.isMiniaturized != true else { return }
-            let message = self.receivedFrame ? "已收到安卓帧，但 Mac 未完成绘制。请查看 surface-mac.log。"
-                : "20 秒内未收到安卓画面。请查看 surface-bridge.log 和 surface-mac.log。"
+            let message = self.receivedFrame ? L10n.t("gfx.timeout_drawn")
+                : L10n.t("gfx.timeout_wait")
             self.showFailure(message)
         }
         firstFrameTimeout = timeout

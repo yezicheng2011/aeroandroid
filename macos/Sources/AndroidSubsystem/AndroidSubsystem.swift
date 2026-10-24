@@ -32,18 +32,18 @@ final class Backend {
         let request = try JSONSerialization.data(withJSONObject: params)
         let encoded = String(decoding: request, as: UTF8.self)
         guard let resources = Bundle.main.resourceURL else {
-            throw BridgeFailure(message: "应用资源目录缺失，请用 build-mac.sh 构建应用。")
+            throw BridgeFailure(message: L10n.t("err.missing_resources"))
         }
         let script = resources.appendingPathComponent("backend/subsystem.py")
         guard FileManager.default.fileExists(atPath: script.path) else {
-            throw BridgeFailure(message: "找不到运行控制器，请重新构建应用。")
+            throw BridgeFailure(message: L10n.t("err.missing_controller"))
         }
         let preferred = UserDefaults.standard.string(forKey: "pythonPath")
         let bundledPython = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/AndroidSubsystem/runtime/python/bin/python3").path
         let python = [preferred, bundledPython, "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
             .compactMap { $0 }.first { FileManager.default.isExecutableFile(atPath: $0) }
-        guard let python else { throw BridgeFailure(message: "请先安装 Python 3，或运行 setup-mac.sh。") }
+        guard let python else { throw BridgeFailure(message: L10n.t("err.missing_python")) }
         return try await Task.detached(priority: .userInitiated) {
             try Self.runController(python: python, script: script, action: action, encoded: encoded)
         }.value
@@ -77,10 +77,10 @@ final class Backend {
         group.wait()
         guard let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             let detail = String(decoding: errorBox.data, as: UTF8.self)
-            throw BridgeFailure(message: detail.isEmpty ? "控制器没有返回有效结果。" : String(detail.suffix(3000)))
+            throw BridgeFailure(message: detail.isEmpty ? L10n.t("err.controller_empty") : String(detail.suffix(3000)))
         }
         guard response["ok"] as? Bool == true else {
-            throw BridgeFailure(message: response["error"] as? String ?? "操作失败")
+            throw BridgeFailure(message: response["error"] as? String ?? L10n.t("err.operation_failed"))
         }
         return response["data"] as? [String: Any] ?? [:]
     }
@@ -103,6 +103,8 @@ final class SubsystemModel: ObservableObject {
     @Published var files: [String] = []
     @Published var notificationsEnabled = UserDefaults.standard.bool(forKey: "forwardNotifications")
     @Published var logsPath = ""
+    /// Remembered UI language preference: system | zh | en. Changing it refreshes SwiftUI.
+    @Published var uiLang: String = L10n.preference().rawValue
     let backend = Backend()
     private var polling = false
     private var seenEvents = Set<String>()
@@ -116,12 +118,31 @@ final class SubsystemModel: ObservableObject {
             $0.package.localizedCaseInsensitiveContains(search) }
     }
     var stateLabel: String {
+        _ = uiLang
         switch state {
-        case "running": return "正在运行"
-        case "booting": return "正在启动"
-        case "stopped": return "已停止"
-        default: return "需要配置"
+        case "running": return L10n.t("state.running")
+        case "booting": return L10n.t("state.booting")
+        case "stopped": return L10n.t("state.stopped")
+        default: return L10n.t("state.unavailable")
         }
+    }
+    /// UI string; depends on `uiLang` so SwiftUI refreshes when language changes.
+    func t(_ key: String) -> String {
+        _ = uiLang
+        return L10n.t(key)
+    }
+    func t(_ key: String, _ a0: CVarArg) -> String {
+        _ = uiLang
+        return L10n.t(key, a0)
+    }
+    func t(_ key: String, _ a0: CVarArg, _ a1: CVarArg) -> String {
+        _ = uiLang
+        return L10n.t(key, a0, a1)
+    }
+    func setUiLang(_ raw: String) {
+        let pref = UiLangPref(rawValue: raw) ?? .system
+        L10n.setPreference(pref)
+        uiLang = pref.rawValue
     }
 
     func beginPolling() {
@@ -134,7 +155,7 @@ final class SubsystemModel: ObservableObject {
     func operation(_ text: String, work: @escaping () async throws -> Void) {
         if busy {
             if queuedOperations.count < 128 { queuedOperations.append((text, work)) }
-            else { error = "待处理操作过多，请稍后再试。" }
+            else { error = L10n.t("err.queue_full") }
             return
         }
         busy = true; progress = text
@@ -178,20 +199,20 @@ final class SubsystemModel: ObservableObject {
         } catch { /* Explicit operations show errors; background polls remain quiet. */ }
     }
     func boot() {
-        operation("正在启动 Android \(android)…") {
+        operation(L10n.t("prog.boot", android)) {
             _ = try await self.backend.call("boot")
             await self.installCompanionIfPresent()
         }
     }
     func stop() {
-        operation("正在关闭窗口并停止安卓系统…") {
+        operation(L10n.t("prog.stop")) {
             for controller in Array(self.surfaceWindows.values) { controller.close() }
             _ = try await self.backend.call("stop")
         }
     }
     func launch(_ app: AndroidApp) {
         if let controller = surfaceWindows[app.package] { controller.showWindow(nil); controller.window?.makeKeyAndOrderFront(nil); return }
-        operation("正在打开 \(app.label)…") {
+        operation(L10n.t("prog.open", app.label)) {
             if let existing = self.surfaceWindows[app.package] { existing.showWindow(nil); return }
             let session = try await self.backend.call("native-session", ["package": app.package])
             try self.openSurface(app, session: session)
@@ -216,42 +237,42 @@ final class SubsystemModel: ObservableObject {
     }
     func close(_ app: AndroidApp) {
         if let controller = surfaceWindows[app.package] { controller.close(); return }
-        operation("正在关闭 \(app.label)…") { _ = try await self.backend.call("close", ["package": app.package]) }
+        operation(L10n.t("prog.close", app.label)) { _ = try await self.backend.call("close", ["package": app.package]) }
     }
     func installCompanionIfPresent() async {
         guard let apk = Bundle.main.resourceURL?.appendingPathComponent("MacBridge.apk"),
               FileManager.default.fileExists(atPath: apk.path) else { return }
         do { _ = try await backend.call("install", ["files": [apk.path]]) }
-        catch { self.error = "安卓已启动，但 Mac Bridge 安装失败：\(error.localizedDescription)" }
+        catch { self.error = L10n.t("err.bridge_install", error.localizedDescription) }
     }
     func install(_ urls: [URL]) {
-        operation("正在安装 APK…") {
+        operation(L10n.t("prog.install")) {
             _ = try await self.backend.call("install", ["files": urls.map(\.path)])
             await self.installCompanionIfPresent()
         }
     }
     func chooseAPKs() {
         let panel = NSOpenPanel()
-        panel.title = "安装 APK（拆分 APK 请一起选择）"
+        panel.title = L10n.t("panel.install_apk")
         panel.allowedContentTypes = [UTType(filenameExtension: "apk") ?? .data]
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK { install(panel.urls) }
     }
     func uninstall(_ app: AndroidApp) {
         let alert = NSAlert()
-        alert.messageText = "卸载 \(app.label)？"
-        alert.informativeText = "安卓应用及其保存的数据将被删除。"
-        alert.addButton(withTitle: "卸载"); alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.t("alert.uninstall_title", app.label)
+        alert.informativeText = L10n.t("alert.uninstall_body")
+        alert.addButton(withTitle: L10n.t("alert.uninstall")); alert.addButton(withTitle: L10n.t("alert.cancel"))
         if alert.runModal() == .alertFirstButtonReturn {
             surfaceWindows[app.package]?.close()
-            operation("正在卸载…") { _ = try await self.backend.call("uninstall", ["package": app.package]) }
+            operation(L10n.t("prog.uninstall")) { _ = try await self.backend.call("uninstall", ["package": app.package]) }
         }
     }
     func importFiles() {
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = true
-        panel.title = "导入文件到安卓 Download/MacBridge"
+        panel.title = L10n.t("panel.import_files")
         if panel.runModal() == .OK {
-            operation("正在导入文件…") {
+            operation(L10n.t("prog.import")) {
                 _ = try await self.backend.call("push", ["files": panel.urls.map(\.path)])
                 await self.loadFiles()
             }
@@ -263,19 +284,19 @@ final class SubsystemModel: ObservableObject {
     }
     func exportFile(_ remote: String) {
         let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
-        panel.title = "选择保存位置"
+        panel.title = L10n.t("panel.export_dest")
         if panel.runModal() == .OK, let url = panel.url {
-            operation("正在导出文件…") {
+            operation(L10n.t("prog.export")) {
                 _ = try await self.backend.call("pull", ["remote": remote, "destination": url.path])
             }
         }
     }
     func exportLauncher(_ app: AndroidApp) {
         let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
-        panel.canCreateDirectories = true; panel.title = "保存 Mac 启动入口"
+        panel.canCreateDirectories = true; panel.title = L10n.t("panel.save_launcher")
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
         if panel.runModal() == .OK, let url = panel.url {
-            operation("正在创建启动入口…") {
+            operation(L10n.t("prog.launcher")) {
                 let result = try await self.backend.call("export-launcher", ["package": app.package,
                     "label": app.label, "app_path": Bundle.main.bundleURL.path, "destination": url.path])
                 if let path = result["launcher"] as? String {
@@ -285,13 +306,13 @@ final class SubsystemModel: ObservableObject {
         }
     }
     func diagnose() {
-        operation("正在检查运行环境…") {
+        operation(L10n.t("prog.diagnose")) {
             let result = try await self.backend.call("diagnostic")
             self.checks = result["checks"] as? [[String: Any]] ?? []
         }
     }
     func saveConfiguration(android: Int, memory: Int, cores: Int, fps: Int) {
-        operation("正在保存运行配置…") {
+        operation(L10n.t("prog.save_config")) {
             _ = try await self.backend.call("configure", ["android": android, "memory_mb": memory,
                                                         "cores": cores, "fps": fps])
         }
@@ -309,7 +330,7 @@ final class SubsystemModel: ObservableObject {
                     if !granted {
                         self.notificationsEnabled = false
                         UserDefaults.standard.set(false, forKey: "forwardNotifications")
-                        self.error = error?.localizedDescription ?? "请在 macOS 系统设置中允许安卓子系统发送通知。"
+                        self.error = error?.localizedDescription ?? L10n.t("err.notify_denied")
                     }
                 }
             }
@@ -329,7 +350,7 @@ final class SubsystemModel: ObservableObject {
                     continue
                 }
                 let content = UNMutableNotificationContent()
-                content.title = event["title"] as? String ?? "安卓应用"
+                content.title = event["title"] as? String ?? L10n.t("notify.default_title")
                 content.body = event["body"] as? String ?? ""
                 content.userInfo = ["package": event["package"] as? String ?? ""]
                 content.sound = .default
@@ -351,7 +372,7 @@ struct AppCard: View {
                 else { Image(systemName: "app.fill").font(.system(size: 40)).foregroundStyle(.green) }
                 Spacer()
                 if model.windows.contains(app.package) {
-                    Circle().fill(.green).frame(width: 8, height: 8).help("独立窗口正在运行")
+                    Circle().fill(.green).frame(width: 8, height: 8).help(model.t("card.window_running"))
                 }
             }
             VStack(alignment: .leading, spacing: 5) {
@@ -359,15 +380,15 @@ struct AppCard: View {
                 Text(app.package).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             HStack {
-                Button(model.windows.contains(app.package) ? "显示" : "打开") { model.launch(app) }
+                Button(model.windows.contains(app.package) ? model.t("card.show") : model.t("card.open")) { model.launch(app) }
                     .buttonStyle(.borderedProminent).tint(.green)
                     .disabled(model.busy)
                 Spacer()
                 Menu {
-                    if model.windows.contains(app.package) { Button("关闭窗口") { model.close(app) } }
-                    Button("创建 Mac 启动入口…") { model.exportLauncher(app) }
+                    if model.windows.contains(app.package) { Button(model.t("card.close_window")) { model.close(app) } }
+                    Button(model.t("card.create_launcher")) { model.exportLauncher(app) }
                     Divider()
-                    Button("卸载…", role: .destructive) { model.uninstall(app) }
+                    Button(model.t("card.uninstall"), role: .destructive) { model.uninstall(app) }
                 } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 22)
                     .disabled(model.busy)
             }
@@ -383,22 +404,22 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("安卓应用").font(.largeTitle.bold())
-                    Text("Android \(model.android) · \(model.windows.count) 个独立窗口")
+                    Text(model.t("lib.title")).font(.largeTitle.bold())
+                    Text(model.t("lib.subtitle", model.android, model.windows.count))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("安装 APK…", systemImage: "plus") { model.chooseAPKs() }
+                Button(model.t("lib.install_apk"), systemImage: "plus") { model.chooseAPKs() }
                     .buttonStyle(.borderedProminent).disabled(model.busy)
             }
-            TextField("搜索应用名称或包名", text: $model.search).textFieldStyle(.roundedBorder)
+            TextField(model.t("lib.search"), text: $model.search).textFieldStyle(.roundedBorder)
             if model.state != "running" {
                 ContentUnavailableView {
-                    Label("安卓子系统尚未启动", systemImage: "cpu")
-                } description: { Text("启动后，你可以同时打开多个安卓应用，每个应用拥有独立窗口。") }
-                actions: { Button("启动 Android \(model.android)") { model.boot() }.disabled(model.busy) }
+                    Label(model.t("lib.not_running_title"), systemImage: "cpu")
+                } description: { Text(model.t("lib.not_running_body")) }
+                actions: { Button(model.t("lib.boot", model.android)) { model.boot() }.disabled(model.busy) }
             } else if model.apps.isEmpty {
-                ContentUnavailableView("暂无应用", systemImage: "square.grid.2x2", description: Text("安装 APK 或刷新应用列表。"))
+                ContentUnavailableView(model.t("lib.empty_title"), systemImage: "square.grid.2x2", description: Text(model.t("lib.empty_body")))
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 18)], spacing: 18) {
@@ -415,19 +436,19 @@ struct FilesView: View {
     @EnvironmentObject var model: SubsystemModel
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("文件交换").font(.largeTitle.bold())
-            Text("交换目录：安卓 Download/MacBridge。应用可以通过安卓文件选择器访问。")
+            Text(model.t("files.title")).font(.largeTitle.bold())
+            Text(model.t("files.hint"))
                 .foregroundStyle(.secondary)
             HStack {
-                Button("导入 Mac 文件…", systemImage: "arrow.down.doc") { model.importFiles() }
-                Button("刷新", systemImage: "arrow.clockwise") { Task { await model.loadFiles() } }
+                Button(model.t("files.import"), systemImage: "arrow.down.doc") { model.importFiles() }
+                Button(model.t("files.refresh"), systemImage: "arrow.clockwise") { Task { await model.loadFiles() } }
             }.disabled(model.busy || model.state != "running")
             List(model.files, id: \.self) { path in
                 HStack {
                     Image(systemName: "doc")
                     Text(URL(fileURLWithPath: path).lastPathComponent)
                     Spacer()
-                    Button("导出…") { model.exportFile(path) }.disabled(model.busy)
+                    Button(model.t("files.export")) { model.exportFile(path) }.disabled(model.busy)
                 }
             }
         }.padding(28).task { if model.state == "running" { await model.loadFiles() } }
@@ -442,41 +463,53 @@ struct RuntimeView: View {
     @CompatibleState<Int> private var fps = 30
     var body: some View {
         Form {
-            Section("运行环境") {
-                Picker("安卓版本", selection: $android) {
+            Section(model.t("settings.language")) {
+                Picker(model.t("settings.language"), selection: Binding(
+                    get: { model.uiLang },
+                    set: { model.setUiLang($0) }
+                )) {
+                    Text(model.t("settings.lang.system")).tag(UiLangPref.system.rawValue)
+                    Text(model.t("settings.lang.zh")).tag(UiLangPref.zh.rawValue)
+                    Text(model.t("settings.lang.en")).tag(UiLangPref.en.rawValue)
+                }
+                Text(model.t("settings.language_hint"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section(model.t("settings.runtime")) {
+                Picker(model.t("settings.android_ver"), selection: $android) {
                     Text("Android 16 · API 36").tag(16)
                     Text("Android 17 · API 37").tag(17)
                 }
-                Text("两个版本使用独立的数据环境；先安装对应 ARM64 镜像。")
+                Text(model.t("settings.android_hint"))
                     .font(.caption).foregroundStyle(.secondary)
-                Picker("内存", selection: $memory) {
+                Picker(model.t("settings.memory"), selection: $memory) {
                     ForEach([2048, 4096, 6144, 8192, 12288, 16384], id: \.self) { Text("\($0 / 1024) GB").tag($0) }
                 }
-                Stepper("CPU 核心：\(cores)", value: $cores, in: 2...12)
-                Picker("帧率上限", selection: $fps) {
+                Stepper(model.t("settings.cores", cores), value: $cores, in: 2...12)
+                Picker(model.t("settings.fps"), selection: $fps) {
                     ForEach([15, 30], id: \.self) { Text("\($0) FPS").tag($0) }
                 }
-                Button("保存配置") { model.saveConfiguration(android: android, memory: memory, cores: cores, fps: fps) }
+                Button(model.t("settings.save")) { model.saveConfiguration(android: android, memory: memory, cores: cores, fps: fps) }
                     .disabled(model.busy || model.state == "running" || model.state == "booting")
-                Text("更改配置前需要停止子系统。Android 17 镜像不可用时会报错，不会降级到旧版本。")
+                Text(model.t("settings.config_hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("桌面通知") {
-                Toggle("转发安卓通知到 Mac", isOn: Binding(get: { model.notificationsEnabled }, set: { model.setNotifications($0) }))
-                Button("打开安卓通知授权设置…") {
+            Section(model.t("settings.notifications")) {
+                Toggle(model.t("settings.forward_notify"), isOn: Binding(get: { model.notificationsEnabled }, set: { model.setNotifications($0) }))
+                Button(model.t("settings.open_notify")) {
                     model.launchPackage("dev.dan.androidsubsystem")
                 }.disabled(model.busy || model.state != "running")
-                Text("需要在安卓设置中允许 Mac Bridge 读取通知，并允许本应用发送 macOS 通知。当前转发需要管理应用保持运行。")
+                Text(model.t("settings.notify_hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("诊断") {
+            Section(model.t("settings.diagnostics")) {
                 HStack {
-                    Button("检查运行环境") { model.diagnose() }.disabled(model.busy)
-                    Button("打开日志文件夹") { model.showLogs() }
+                    Button(model.t("settings.check_env")) { model.diagnose() }.disabled(model.busy)
+                    Button(model.t("settings.open_logs")) { model.showLogs() }
                 }
                 ForEach(Array(model.checks.enumerated()), id: \.offset) { _, check in
                     VStack(alignment: .leading) {
-                        Label(check["name"] as? String ?? "检查", systemImage: check["ok"] as? Bool == true ? "checkmark.circle.fill" : "exclamationmark.triangle")
+                        Label(check["name"] as? String ?? model.t("settings.check_fallback"), systemImage: check["ok"] as? Bool == true ? "checkmark.circle.fill" : "exclamationmark.triangle")
                             .foregroundStyle(check["ok"] as? Bool == true ? Color.green : Color.orange)
                         Text(check["detail"] as? String ?? "").font(.caption).textSelection(.enabled).foregroundStyle(.secondary)
                     }
@@ -500,12 +533,12 @@ struct MainView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Image(systemName: "square.stack.3d.up.fill").font(.title2).foregroundStyle(.green)
-                    Text("安卓子系统").font(.headline)
+                    Text(model.t("app.title")).font(.headline)
                 }.padding(.horizontal, 16).padding(.top, 22)
                 List(selection: $section) {
-                    Label("应用库", systemImage: "square.grid.2x2").tag("apps")
-                    Label("文件交换", systemImage: "folder").tag("files")
-                    Label("系统设置", systemImage: "slider.horizontal.3").tag("settings")
+                    Label(model.t("nav.library"), systemImage: "square.grid.2x2").tag("apps")
+                    Label(model.t("nav.files"), systemImage: "folder").tag("files")
+                    Label(model.t("nav.settings"), systemImage: "slider.horizontal.3").tag("settings")
                 }.listStyle(.sidebar)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -513,8 +546,8 @@ struct MainView: View {
                         Text(model.stateLabel).font(.caption)
                     }
                     if model.state == "running" || model.state == "booting" {
-                        Button("停止子系统", systemImage: "stop.circle") { model.stop() }
-                    } else { Button("启动子系统", systemImage: "play.circle") { model.boot() } }
+                        Button(model.t("nav.stop"), systemImage: "stop.circle") { model.stop() }
+                    } else { Button(model.t("nav.start"), systemImage: "play.circle") { model.boot() } }
                 }.disabled(model.busy).padding(16)
             }.navigationSplitViewColumnWidth(min: 190, ideal: 220)
         } detail: {
@@ -532,13 +565,13 @@ struct MainView: View {
         }
         .frame(minWidth: 900, minHeight: 620)
         .toolbar {
-            Button("刷新", systemImage: "arrow.clockwise") {
-                model.operation("正在刷新…") { await model.refresh() }
+            Button(model.t("nav.refresh"), systemImage: "arrow.clockwise") {
+                model.operation(L10n.t("prog.refresh")) { await model.refresh() }
             }.disabled(model.busy)
         }
-        .alert("操作未完成", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("好", role: .cancel) { model.error = nil }
-            Button("查看日志") { model.showLogs(); model.error = nil }
+        .alert(model.t("alert.failed_title"), isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            Button(model.t("alert.ok"), role: .cancel) { model.error = nil }
+            Button(model.t("alert.view_logs")) { model.showLogs(); model.error = nil }
         } message: { Text(model.error ?? "") }
         .onOpenURL { url in
             if url.scheme == "android-subsystem", url.host == "launch",
@@ -563,7 +596,7 @@ struct MainView: View {
             group.notify(queue: .main) {
                 let urls = dropped.urls
                 if !urls.isEmpty && urls.allSatisfy({ $0.pathExtension.lowercased() == "apk" }) { model.install(urls) }
-                else { model.error = "请拖入 APK；其他文件请在文件交换页面导入。" }
+                else { model.error = L10n.t("err.drop_apk") }
             }
             return true
         }
@@ -598,7 +631,7 @@ struct AndroidSubsystemApp: App {
     @StateObject private var model = SubsystemModel()
     private let notificationDelegate = NotificationDelegate()
     var body: some Scene {
-        WindowGroup("安卓子系统") {
+        WindowGroup(model.t("app.title")) {
             MainView().environmentObject(model).onAppear {
                 notificationDelegate.launch = { package in model.launchPackage(package) }
                 UNUserNotificationCenter.current().delegate = notificationDelegate
@@ -606,19 +639,19 @@ struct AndroidSubsystemApp: App {
         }
         .commands {
             CommandGroup(after: .newItem) {
-                Button("安装 APK…") { model.chooseAPKs() }.keyboardShortcut("i", modifiers: .command).disabled(model.busy)
+                Button(model.t("lib.install_apk")) { model.chooseAPKs() }.keyboardShortcut("i", modifiers: .command).disabled(model.busy)
             }
         }
-        MenuBarExtra("安卓子系统", systemImage: "square.stack.3d.up") {
+        MenuBarExtra(model.t("app.title"), systemImage: "square.stack.3d.up") {
             Text("Android \(model.android) · \(model.stateLabel)")
             Divider()
             if model.state == "running" {
                 ForEach(model.apps.prefix(15)) { app in Button(app.label) { model.launch(app) }.disabled(model.busy) }
                 Divider()
-                Button("停止子系统") { model.stop() }.disabled(model.busy)
-            } else { Button("启动子系统") { model.boot() }.disabled(model.busy) }
-            Button("显示管理窗口") { NSApp.activate(ignoringOtherApps: true); NSApp.windows.first?.makeKeyAndOrderFront(nil) }
-            Button("退出管理应用（安卓继续运行）") { NSApp.terminate(nil) }
+                Button(model.t("nav.stop")) { model.stop() }.disabled(model.busy)
+            } else { Button(model.t("nav.start")) { model.boot() }.disabled(model.busy) }
+            Button(model.t("menu.show_window")) { NSApp.activate(ignoringOtherApps: true); NSApp.windows.first?.makeKeyAndOrderFront(nil) }
+            Button(model.t("menu.quit")) { NSApp.terminate(nil) }
         }
     }
 }

@@ -2,7 +2,7 @@
     <uses-sdk android:minSdkVersion="36" android:targetSdkVersion="36" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <application android:label="Mac Bridge" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <service android:name=".BridgeIme" android:label="Mac Bridge 键盘" android:exported="true" android:permission="android.permission.BIND_INPUT_METHOD">
+        <service android:name=".BridgeIme" android:label="Mac Bridge Keyboard" android:exported="true" android:permission="android.permission.BIND_INPUT_METHOD">
             <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/ime" />
         </service>
@@ -10,7 +10,7 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <provider android:name=".BridgeProvider" android:authorities="dev.dan.androidsubsystem.bridge" android:exported="true" android:readPermission="android.permission.DUMP" />
-        <service android:name=".BridgeNotifications" android:label="Mac 通知桥接" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <service android:name=".BridgeNotifications" android:label="Mac Notification Bridge" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
         </service>
     </application>
