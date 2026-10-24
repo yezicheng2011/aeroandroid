@@ -23,7 +23,11 @@ jobs:
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-          uname -m; sw_vers; swift --version
+          # The sources need a Swift 6 compiler (Xcode 16, run in Swift 5 language mode), like current Command Line Tools.
+          ls -d /Applications/Xcode_*.app
+          xc="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xc/Contents/Developer"
+          uname -m; sw_vers; xcodebuild -version; swift --version
       - name: Fetch pinned build toolchain (JDK 17, build-tools 36, android-36 platform; SHA-256 checked)
         run: |
           tc="$RUNNER_TEMP/tc"; mkdir -p "$tc/dl" "$tc/sdk/build-tools" "$tc/sdk/platforms"

@@ -25,6 +25,6 @@ DMG 内包含：
 - OpenJDK 17（Eclipse Temurin）— GPL-2.0 with Classpath Exception
 - CPython 3.12（python-build-standalone）— PSF License
 - scrcpy v5.0.1 — Apache-2.0
-- 仅 `--with-gpl` 时：Magisk v30.7、host_patch.sh、Vector v2.2、microg-spoof — GPL-3.0；microG GmsCore — Apache-2.0；Companion（com.android.vending）— 专有
+- 仅 `--with-gpl` 时：Magisk v30.7、host_patch.sh、Vector v2.2、microg-spoof — GPL-3.0；microG GmsCore 与 Companion APK — 见上游 microG 项目许可证
 
 默认安装纯 AOSP 版，不含任何 GPL 组件。
