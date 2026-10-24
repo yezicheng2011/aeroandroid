@@ -1,0 +1,122 @@
+name: Desktop release
+# Builds the lightweight macOS DMG (manager app + installer + source) and publishes a GitHub Release.
+# Apple Silicon only. Free signing only: ad-hoc codesign (no Apple Developer ID).
+# The Android Emulator / SDK / system image are NOT bundled (Android SDK License §3.4 forbids
+# redistribution); the installer downloads them from Google at install time, SHA-256 pinned.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v0.2.1'
+        required: true
+permissions:
+  contents: write
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          uname -m; sw_vers; swift --version
+      - name: Fetch pinned build toolchain (JDK 17, build-tools 36, android-36 platform; SHA-256 checked)
+        run: |
+          tc="$RUNNER_TEMP/tc"; mkdir -p "$tc/dl" "$tc/sdk/build-tools" "$tc/sdk/platforms"
+          python3 - scripts/runtime-lock.json > "$tc/list.tsv" <<'PY'
+          import json, sys
+          for a in json.load(open(sys.argv[1]))['archives']:
+              r = a['relative_path']
+              if 'OpenJDK' in r or 'build-tools' in r or '/platform-3' in r:
+                  print(a['url'], r.split('/')[-1], a['sha256'], sep='\t')
+          PY
+          while IFS=$'\t' read -r url name sha; do
+            curl -fsSL --retry 3 -o "$tc/dl/$name" "$url"
+            echo "$sha  $tc/dl/$name" | shasum -a 256 -c -
+          done < "$tc/list.tsv"
+          mkdir -p "$tc/x"
+          tar -xzf "$tc"/dl/OpenJDK17U-*.tar.gz -C "$tc/x"; mv "$tc"/x/jdk-17* "$tc/jdk"
+          unzip -q "$tc"/dl/build-tools_*.zip -d "$tc/x/bt"; mv "$tc"/x/bt/* "$tc/sdk/build-tools/36.0.0"
+          unzip -q "$tc"/dl/platform-36_*.zip -d "$tc/x/pl"; mv "$tc"/x/pl/* "$tc/sdk/platforms/android-36"
+          echo "JAVA_HOME=$tc/jdk/Contents/Home" >> "$GITHUB_ENV"
+          echo "ANDROID_SUBSYSTEM_SDK=$tc/sdk" >> "$GITHUB_ENV"
+          # Throwaway CI signing key for the guest APK; never published.
+          echo "ANDROID_SUBSYSTEM_SIGNING_DIR=$RUNNER_TEMP/ci-signing" >> "$GITHUB_ENV"
+      - name: Build guest APK and Mac app
+        run: |
+          /bin/bash scripts/build-guest.sh
+          /bin/bash scripts/build-mac.sh
+      - name: Check architecture (arm64)
+        run: |
+          app="dist/Android Subsystem.app"
+          lipo -info "$app/Contents/MacOS/AndroidSubsystem" "$app/Contents/Resources/AndroidEntry"
+          for f in "$app/Contents/MacOS/AndroidSubsystem" "$app/Contents/Resources/AndroidEntry"; do
+            lipo -archs "$f" | grep -qw arm64 || { echo "::error::not arm64: $f"; exit 1; }
+          done
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist"
+      - name: Ad-hoc sign (free; avoids the "damaged" error on Apple silicon)
+        run: |
+          app="dist/Android Subsystem.app"
+          xattr -cr "$app"
+          codesign --force --timestamp=none --sign - "$app/Contents/Resources/AndroidEntry"
+          codesign --force --deep --timestamp=none --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/cs.txt
+          grep -q 'Signature=adhoc' /tmp/cs.txt
+      - name: Smoke test (offline launch, no runtime installed)
+        run: |
+          app="dist/Android Subsystem.app"
+          export HOME="$RUNNER_TEMP/smoke-home"; mkdir -p "$HOME"
+          # Backend controller answers with JSON even without a runtime.
+          /usr/bin/python3 "$app/Contents/Resources/backend/subsystem.py" status '{}' > /tmp/status.json || true
+          cat /tmp/status.json; python3 -c 'import json;json.load(open("/tmp/status.json"))'
+          # The GUI must start and stay up.
+          "$app/Contents/MacOS/AndroidSubsystem" > /tmp/app.log 2>&1 & pid=$!
+          sleep 20
+          if ! kill -0 $pid 2>/dev/null; then cat /tmp/app.log; echo '::error::app exited early'; exit 1; fi
+          echo "app alive after 20s (pid $pid)"; kill $pid; wait $pid || true
+      - name: Build DMG
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          mkdir -p dmgroot/aeroandroid-source out
+          git archive HEAD | tar -x -C dmgroot/aeroandroid-source
+          rm -rf dmgroot/aeroandroid-source/.github dmgroot/aeroandroid-source/packaging
+          ditto "dist/Android Subsystem.app" "dmgroot/Android Subsystem.app"
+          cp "packaging/dmg/安装 aeroandroid.command" "packaging/dmg/首次安装说明 README-FIRST.txt" LICENSE NOTICE dmgroot/
+          chmod +x "dmgroot/安装 aeroandroid.command"
+          # No GPL parts: microg-spoof/ and third_party/Magisk/ are not in git.
+          test ! -e dmgroot/aeroandroid-source/microg-spoof && test ! -e dmgroot/aeroandroid-source/third_party/Magisk
+          xattr -cr dmgroot
+          hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "out/aeroandroid-$v-macOS-arm64.dmg"
+          mnt="$(hdiutil attach -nobrowse -readonly "out/aeroandroid-$v-macOS-arm64.dmg" | awk -F'\t' '/\/Volumes\// {print $NF}' | tail -1)"
+          echo "mounted at $mnt"; ls -la "$mnt"
+          codesign --verify --deep --strict "$mnt/Android Subsystem.app"
+          lipo -info "$mnt/Android Subsystem.app/Contents/MacOS/AndroidSubsystem"
+          # Installer smoke test from the mounted image: copies source, then build.sh prints help.
+          HOME="$RUNNER_TEMP/inst-home" bash "$mnt/安装 aeroandroid.command" --help
+          test -x "$RUNNER_TEMP/inst-home/aeroandroid/build.sh"
+          HOME="$RUNNER_TEMP/inst-home" bash "$RUNNER_TEMP/inst-home/aeroandroid/build.sh" --check || echo "(--check reported missing prerequisites on the runner; informational)"
+          hdiutil detach "$mnt"
+      - uses: actions/upload-artifact@v4
+        with: { name: macos, path: out/* }
+
+  release:
+    needs: [macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts, merge-multiple: true }
+      - name: Checksums
+        run: cd artifacts && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publish release (never overwrites an existing release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "::error::release $tag already exists; not overwriting"; exit 1; fi
+          gh release create "$tag" artifacts/* --title "aeroandroid ${tag}" --notes-file docs/RELEASE_NOTES.md --target "$GITHUB_SHA"
