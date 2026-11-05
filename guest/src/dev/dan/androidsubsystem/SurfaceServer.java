@@ -83,6 +83,7 @@ public final class SurfaceServer {
                 while (true) {
                     Socket client = server.accept();
                     client.setTcpNoDelay(true);
+                    client.setSendBufferSize(1 << 22);   // raw RGBA frames: keep the pipe full at 60 FPS
                     client.setSoTimeout(10000);
                     new Thread(() -> {
                         try { new Session(client).run(); }
@@ -232,7 +233,8 @@ public final class SurfaceServer {
                 int count = w * h * 4;
                 if (pixels == null || pixels.length != count) pixels = new byte[count];
                 ByteBuffer data = plane.getBuffer();
-                for (int row = 0; row < h; row++) { data.position(row * stride); data.get(pixels, row * w * 4, w * 4); }
+                if (stride == w * 4) { data.position(0); data.get(pixels, 0, count); }   // one copy when rows are tightly packed
+                else for (int row = 0; row < h; row++) { data.position(row * stride); data.get(pixels, row * w * 4, w * 4); }
                 synchronized (this) {
                     SurfaceWire.writeFrame(output, w, h, image.getTimestamp(), pixels);
                 }
@@ -256,6 +258,31 @@ public final class SurfaceServer {
             System.out.println("Surface launch package=" + packageName + " display=" + displayId
                     + " exit=" + exit + " output=" + log.text().trim());
             if (exit != 0 || log.text().contains("Error:")) throw new IllegalStateException("Launch failed: " + log.text());
+        }
+        /** Buttons from the Mac controller become gamepad key events; sticks, triggers and the
+         * hat become one joystick motion event. Games that read the event source see a gamepad. */
+        void gamepad(JSONObject message) throws Exception {
+            long now = SystemClock.uptimeMillis();
+            org.json.JSONArray keys = message.optJSONArray("keys");
+            for (int i = 0; keys != null && i < Math.min(keys.length(), 32); i++) {
+                org.json.JSONArray key = keys.getJSONArray(i);
+                int code = key.getInt(0), action = key.getInt(1);
+                if (!KeyEvent.isGamepadButton(code) || (action != 0 && action != 1)) throw new IllegalArgumentException("Bad gamepad key");
+                inject(new KeyEvent(now, now, action, code, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_GAMEPAD), displayId);
+            }
+            JSONObject axes = message.optJSONObject("axes");
+            if (axes == null) return;
+            MotionEvent.PointerProperties properties = new MotionEvent.PointerProperties(); properties.id = 0; properties.toolType = MotionEvent.TOOL_TYPE_UNKNOWN;
+            MotionEvent.PointerCoords coords = new MotionEvent.PointerCoords();
+            String[] names = {"x", "y", "z", "rz", "lt", "rt", "hx", "hy"};
+            int[] ids = {MotionEvent.AXIS_X, MotionEvent.AXIS_Y, MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ,
+                    MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y};
+            for (int i = 0; i < names.length; i++) {
+                coords.setAxisValue(ids[i], (float) Math.max(-1, Math.min(1, axes.optDouble(names[i], 0))));
+            }
+            MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_MOVE, 1, new MotionEvent.PointerProperties[]{properties},
+                    new MotionEvent.PointerCoords[]{coords}, 0, 0, 1, 1, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, InputDevice.SOURCE_JOYSTICK, 0);
+            inject(event, displayId); event.recycle();
         }
         void control(JSONObject message) throws Exception {
             String type = message.getString("type");
@@ -301,6 +328,8 @@ public final class SurfaceServer {
                     if (events == null) { JSONObject error = new JSONObject(); error.put("event", "input-warning"); error.put("message", "Enable Mac Bridge IME for Unicode text input"); json(error); }
                     else for (KeyEvent event : events) inject(event, displayId);
                 }
+            } else if ("gamepad".equals(type)) {
+                gamepad(message);
             } else if ("focus".equals(type)) {
                 // Re-select the existing activity on its display; Android owns Activity lifecycle.
                 startApplication();

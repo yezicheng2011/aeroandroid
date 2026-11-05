@@ -377,6 +377,7 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
     private var renderedFrame = false
     private var failed = false
     private var firstFrameTimeout: DispatchWorkItem?
+    private let gamepad = GamepadBridge()
     var onClosed: (() -> Void)?
     var onError: ((String) -> Void)?
     init(app: AndroidApp, session: [String: Any]) throws {
@@ -391,6 +392,7 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
         window.contentView = surface; window.isReleasedWhenClosed = false; window.center()
         super.init(window: window); window.delegate = self
         surface.control = { [weak transport] command in transport?.send(command) }
+        gamepad.send = { [weak transport] command in transport?.send(command) }
         surface.baseDPI = session["dpi"] as? Int ?? 200
         surface.resizeDisplay = { [weak self] width, height, dpi in
             guard let self, self.renderedFrame, !self.failed else { return }
@@ -454,12 +456,13 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
         surface.showFailureMessage(message); onError?(message); transport.close()
     }
     required init?(coder: NSCoder) { fatalError("Storyboard initialization is unsupported") }
-    func windowDidBecomeKey(_ notification: Notification) { transport.send(["type": "focus"]); surface.draw() }
+    func windowDidBecomeKey(_ notification: Notification) { transport.send(["type": "focus"]); surface.draw(); gamepad.start() }
+    func windowDidResignKey(_ notification: Notification) { gamepad.stop() }
     func windowDidMiniaturize(_ notification: Notification) { transport.send(["type": "visibility", "visible": false]) }
     func windowDidDeminiaturize(_ notification: Notification) {
         transport.send(["type": "visibility", "visible": true])
         if !renderedFrame && !failed { armFirstFrameTimeout() }
         surface.draw()
     }
-    func windowWillClose(_ notification: Notification) { firstFrameTimeout?.cancel(); transport.close(); onClosed?() }
+    func windowWillClose(_ notification: Notification) { firstFrameTimeout?.cancel(); gamepad.stop(); transport.close(); onClosed?() }
 }

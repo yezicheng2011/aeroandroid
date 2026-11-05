@@ -26,7 +26,7 @@ PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\Z")
 COMPANION = "dev.dan.androidsubsystem"
 AUTHORITY = COMPANION + ".bridge"
 DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
-            "resolution": "1280x960/200", "fps": 30, "bitrate": "12M"}
+            "resolution": "1280x960/200", "fps": 30, "bitrate": "12M", "gpu": "auto"}
 
 
 class SubsystemError(Exception):
@@ -126,6 +126,8 @@ class Controller:
         w, h, dpi = map(int, re.split(r"[x/]", c["resolution"]))
         if not (320 <= w <= 3840 and 320 <= h <= 3840 and 100 <= dpi <= 640):
             raise SubsystemError("Resolution or DPI outside supported range")
+        if c.get("gpu") not in ("auto", "host"):
+            raise SubsystemError("GPU mode must be auto or host")
         if not re.fullmatch(r"[1-9][0-9]?M", str(c.get("bitrate"))):
             raise SubsystemError("Invalid video bitrate")
 
@@ -380,7 +382,7 @@ class Controller:
             if not active and not self.running_emulator():
                 self.select_start_port()
                 argv = [self.tool("emulator"), "-avd", self.avd, "-port", str(self.config["port"]),
-                        "-no-window", "-no-boot-anim", "-gpu", "auto", "-accel", "on",
+                        "-no-window", "-no-boot-anim", "-gpu", self.config["gpu"], "-accel", "on",
                         "-memory", str(self.config["memory_mb"]), "-cores", str(self.config["cores"]),
                         "-no-metrics", *self.webcam_flags()]
                 if not self.quick_boot:
@@ -532,7 +534,7 @@ class Controller:
             w, h, dpi = map(int, re.split(r"[x/]", self.config["resolution"]))
             return {"port": record["port"], "token": token_path.read_text(), "version": 1,
                     "package": package, "width": min(w, 2560), "height": min(h, 2560), "dpi": dpi,
-                    "fps": min(self.config["fps"], 30), "transport": "rgba-tcp-v1"}
+                    "fps": min(self.config["fps"], 60), "transport": "rgba-tcp-v1"}
 
     def terminate(self, record):
         if self.process_matches(record):

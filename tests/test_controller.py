@@ -115,6 +115,23 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))
         self.assertEqual(self.controller.status()['state'], 'stopped')
 
+    def test_gpu_mode_is_configurable_and_validated_and_fps_reaches_60(self):
+        self.controller.boot()
+        args = json.loads((self.root / 'emulator-argv.json').read_text())
+        self.assertEqual(args[args.index('-gpu') + 1], 'auto')
+        self.controller.stop()
+        self.controller.configure({'gpu': 'host', 'fps': 60})
+        self.controller.boot()
+        args = json.loads((self.root / 'emulator-argv.json').read_text())
+        self.assertEqual(args[args.index('-gpu') + 1], 'host')
+        bundle = self.root / 'bridge bundle'; (bundle / 'backend').mkdir(parents=True)
+        (bundle / 'MacBridge.apk').write_bytes(b'bridge')
+        with patch.object(subsystem, '__file__', str(bundle / 'backend/subsystem.py')):
+            self.assertEqual(self.controller.native_session('com.example.first')['fps'], 60)
+        self.controller.stop()
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'GPU mode'):
+            self.controller.configure({'gpu': 'software'})
+
     def test_mac_camera_is_passed_through_only_when_one_is_connected(self):
         self.controller.boot()
         self.assertNotIn('-camera-back', json.loads((self.root / 'emulator-argv.json').read_text()))

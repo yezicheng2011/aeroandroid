@@ -71,6 +71,18 @@ One executable plays three roles, chosen by its `Info.plist`:
 | `scripts/` | Build, provisioning (Magisk, microG), pre-installed apps (`preinstall.json`), logo generator |
 | `assets/` | Logo (`logo.svg`, `logo-1024.png`) and `AppIcon.icns` |
 
+## Gaming
+
+- **Controllers.** Plug in or pair an Xbox, PlayStation, Switch Pro or MFi controller. The window you are playing in
+  sends it to Android as a gamepad: buttons as gamepad keys, sticks, triggers and the D-pad as joystick axes.
+  Settings → Game controller lets you remap each button or switch controller input off. Games that read the input
+  event see a gamepad; a game that lists connected input devices at startup may not, because Android here has no
+  real controller hardware.
+- **Graphics.** Android runs on the Apple Silicon hypervisor and renders with the Mac's GPU: "Automatic" already picks it,
+  and Settings → Graphics acceleration can force it. Up to 60 FPS can be selected.
+- **Limits.** Frames still reach the Mac as raw pixels over a local connection, which is the ceiling for fast games, so
+  60 FPS is a cap and not a promise. Hardware video encoding would lift it but is not built yet.
+
 ## Pre-installed apps
 
 microG (Services, Companion, GSFProxy) is provisioned by `scripts/provision-microg.py`. Aurora Store and Fennec
