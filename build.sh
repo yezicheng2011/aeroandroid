@@ -231,7 +231,25 @@ PY
   )
 }
 
+intel_notice() {
+  cat <<'NOTICE'
+
+  ──────────────────────────────────────────────────────────────────────
+  Intel Mac detected / 检测到 Intel Mac
+  Android runs here as x86_64. Many Android apps, especially most 3D games,
+  ship only arm64 code and will NOT install or run. Apps written in plain
+  Java/Kotlin and apps with x86_64 code work. It is also slower than on
+  Apple Silicon.
+  这里的安卓以 x86_64 运行。很多安卓应用，尤其是大多数 3D 游戏，只含 arm64
+  代码，将无法安装或运行；纯 Java/Kotlin 应用和带 x86_64 代码的应用可用。
+  速度也低于 Apple 芯片的 Mac。
+  ──────────────────────────────────────────────────────────────────────
+
+NOTICE
+}
+
 main() {
+  if [[ "$HOST_ARCH" != arm64 ]]; then intel_notice; fi
   check_prereqs || { [[ "$check_only" == 1 ]] && exit 1; die '环境检查未通过 / prerequisites missing'; }
   [[ "$check_only" == 1 ]] && { say '环境检查通过 / All prerequisites OK'; exit 0; }
   pick_mirror

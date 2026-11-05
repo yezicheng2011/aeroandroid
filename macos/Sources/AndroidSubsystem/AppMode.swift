@@ -15,6 +15,27 @@ enum AppBundle {
     }
 }
 
+/// First launch on an Intel Mac: say plainly that some Android apps cannot run here.
+enum IntelNotice {
+    /// hw.optional.arm64 is 1 on Apple Silicon (also for an x86_64 process under Rosetta) and absent on Intel.
+    static var isIntelMac: Bool {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return !(sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 && value == 1)
+    }
+    @MainActor static func showOnce() {
+        guard isIntelMac, !UserDefaults.standard.bool(forKey: "intelNoticeShown") else { return }
+        UserDefaults.standard.set(true, forKey: "intelNoticeShown")
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.t("intel.title")
+        alert.informativeText = L10n.t("intel.body")
+        alert.addButton(withTitle: L10n.t("alert.ok"))
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+}
+
 /// Makes double-clicking an .apk open the installer helper instead of the manager window.
 enum ApkHandler {
     private static let contentType = "com.android.package-archive"
@@ -144,6 +165,7 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
     private var started = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        IntelNotice.showOnce()
         // Opened by double-clicking an .apk, the open-files event arrives right after launch;
         // opened directly, there is nothing to install yet, so ask for a file.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [self] in

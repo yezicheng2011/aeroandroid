@@ -115,6 +115,12 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))
         self.assertEqual(self.controller.status()['state'], 'stopped')
 
+    def test_apk_that_cannot_run_on_this_cpu_gets_a_plain_explanation(self):
+        apk = self.root / 'game.apk'; apk.write_bytes(b'arm64 only')
+        with self.assertRaisesRegex(subsystem.SubsystemError, r'x86_64,x86\). On an Intel Mac, apps built only for arm64'):
+            self.controller.install([str(apk)])
+        self.controller.stop()
+
     def test_gpu_mode_is_configurable_and_validated_and_fps_reaches_60(self):
         self.controller.boot()
         args = json.loads((self.root / 'emulator-argv.json').read_text())

@@ -81,6 +81,8 @@ code. The release DMG is a universal binary.
 - **Android apps with arm64-only native code.** Many games ship only arm64 libraries. Whether the stock x86_64 image
   translates them is not confirmed: after the first boot, Settings → Check runtime environment shows the system's
   CPU types ("Android CPU types"). If `arm64-v8a` is not listed, those apps will not run on an Intel Mac.
+- **Warning.** On an Intel Mac, `build.sh` prints this notice, the app shows it the first time it opens, and an app that
+  cannot run because of its CPU type is refused with a plain explanation instead of a cryptic install error.
 - **Speed.** Intel Macs run the x86_64 guest with the hypervisor too, but expect less performance than Apple Silicon.
 - **Not tested on an Intel Mac.** Written and checked without one.
 

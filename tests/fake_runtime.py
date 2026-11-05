@@ -61,6 +61,7 @@ elif name == 'adb':
             while True: time.sleep(0.1)
         elif command[:2] == ['getprop', 'sys.boot_completed']: print('1')
         elif command[:2] == ['getprop', 'ro.build.version.sdk']: print(state['api'])
+        elif command[:2] == ['getprop', 'ro.product.cpu.abilist']: print('x86_64,x86')
         elif command[:2] == ['content', 'query']:
             endpoint = command[-1].rsplit('/', 1)[-1]
             if endpoint == 'apps': data = {'apps': [{'package': 'com.example.first', 'label': 'First'}, {'package': 'com.example.second', 'label': 'Second'}]}
@@ -70,7 +71,9 @@ elif name == 'adb':
             print('Row: 0 payload=' + base64.b64encode(json.dumps(data).encode()).decode())
         elif command[0] == 'test': sys.exit(1)
         elif command[0] == 'find': print('/sdcard/Download/MacBridge/test.txt')
-    elif args[0] in ['install', 'install-multiple', 'uninstall']: print('Success')
+    elif args[0] in ['install', 'install-multiple', 'uninstall']:
+        if args[0] != 'uninstall' and Path(args[-1]).read_bytes() == b'arm64 only': print('Failure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries, res=-113]')
+        else: print('Success')
     elif args[0] == 'push': print('1 file pushed')
     elif args[0] == 'pull': (Path(args[2]) / Path(args[1]).name).write_text('android data')
 elif name == 'scrcpy':

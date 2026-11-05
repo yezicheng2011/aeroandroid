@@ -641,6 +641,7 @@ struct AndroidSubsystemApp: App {
                 notificationDelegate.launch = { package in model.launchPackage(package) }
                 UNUserNotificationCenter.current().delegate = notificationDelegate
                 ApkHandler.registerOnce()
+                IntelNotice.showOnce()
             }
         }
         .commands {
