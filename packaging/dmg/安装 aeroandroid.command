@@ -7,8 +7,8 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 src="$here/aeroandroid-source"
 dest="${AEROANDROID_DIR:-$HOME/aeroandroid}"
-if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
-  echo '需要 Apple Silicon Mac（M1–M5）/ Requires an Apple Silicon Mac.'; exit 1
+if [[ "$(uname -s)" != Darwin ]]; then
+  echo '需要 Mac（Apple 芯片或 Intel）/ Requires a Mac (Apple Silicon or Intel).'; exit 1
 fi
 [[ -d "$src" ]] || { echo "找不到源码目录 / missing: $src"; exit 1; }
 echo "==> 复制源码到 / Copying source to: $dest"

@@ -115,7 +115,7 @@ def pinned_path(base, relative):
 
 
 def load_assets(cache, controller):
-    lock = json.loads(core.lock_file(controller.config['android']).read_text())
+    lock = json.loads(core.lock_file(controller.config['android'], controller.arch).read_text())
     entries = {entry['kind']: entry for entry in lock['archives']
                if entry.get('kind') in {*APK_KINDS, 'vector'}}
     if set(entries) != {*APK_KINDS, 'vector'}:
@@ -156,7 +156,7 @@ def load_assets(cache, controller):
 
 def expected_signers(controller):
     """Verification does not require keeping the downloaded APK archives."""
-    lock = json.loads(core.lock_file(controller.config['android']).read_text())
+    lock = json.loads(core.lock_file(controller.config['android'], controller.arch).read_text())
     local = json.loads((PROJECT / 'artifacts/microg-tools.json').read_text())
     result = {}
     for kind, package in APK_KINDS.items():

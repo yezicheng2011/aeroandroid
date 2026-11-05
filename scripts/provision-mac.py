@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Provision this project's AVD with persistent Magisk.
 
-The patched boot image is private to this runtime. Real ARM64 boot (API 36 or 37) and
+The patched boot image is private to this runtime. Real boot (API 36 or 37, arm64 or x86_64) and
 Magisk behavior must be accepted on the user's Mac.
 """
 from __future__ import annotations
@@ -20,9 +20,11 @@ spec = importlib.util.spec_from_file_location('subsystem', PROJECT / 'backend/su
 subsystem = importlib.util.module_from_spec(spec); spec.loader.exec_module(subsystem)
 
 
-def lock_file(android):
-    """The pinned runtime for an Android version: runtime-lock.json (16), runtime-lock-17.json (17)."""
-    return PROJECT / ('scripts/runtime-lock.json' if android == 16 else f'scripts/runtime-lock-{android}.json')
+def lock_file(android, arch='arm64'):
+    """The pinned runtime for an Android version and Mac architecture:
+    runtime-lock.json (16), runtime-lock-17.json, and a -x86_64 suffix for Intel Macs."""
+    name = 'runtime-lock' + ('' if android == 16 else f'-{android}') + ('' if arch == 'arm64' else f'-{arch}')
+    return PROJECT / 'scripts' / (name + '.json')
 
 
 def digest(path):
@@ -84,7 +86,7 @@ def verify(controller):
 def provision(cache, root=None):
     c = subsystem.Controller(root)
     if c.config['android'] not in (16, 17): raise RuntimeError('This pinned Magisk profile supports Android 16 and 17 only')
-    lock = json.loads(lock_file(c.config['android']).read_text())
+    lock = json.loads(lock_file(c.config['android'], c.arch).read_text())
     assets = {}
     for entry in lock['archives']:
         if entry.get('kind') == 'magisk':
@@ -97,11 +99,11 @@ def provision(cache, root=None):
     adb_root(c)
     patch_script = PROJECT / 'third_party/Magisk/host_patch.sh'
     if not patch_script.exists(): raise RuntimeError('Missing pinned upstream Magisk patch source')
-    ramdisk = c.sdk / f'system-images/android-{c.image_api}/{c.image_tag}/arm64-v8a/ramdisk.img'
-    if not ramdisk.is_file(): raise RuntimeError(f"Android {c.config['android']} ARM64 ramdisk is missing")
+    ramdisk = c.sdk / f'system-images/android-{c.image_api}/{c.image_tag}/{c.abi}/ramdisk.img'
+    if not ramdisk.is_file(): raise RuntimeError(f"Android {c.config['android']} {c.abi} ramdisk is missing")
     with zipfile.ZipFile(assets['magisk']) as apk:
-        busybox = workspace / 'busybox'; busybox.write_bytes(apk.read('lib/arm64-v8a/libbusybox.so'))
-    print(f"修补私有 ramdisk：{assets['magisk'].name} / Android {c.config['android']} ARM64", flush=True)
+        busybox = workspace / 'busybox'; busybox.write_bytes(apk.read(f'lib/{c.abi}/libbusybox.so'))
+    print(f"修补私有 ramdisk：{assets['magisk'].name} / Android {c.config['android']} {c.abi}", flush=True)
     c.adb('push', str(busybox), '/data/local/tmp/busybox')
     c.adb('push', str(assets['magisk']), '/data/local/tmp/magisk.apk', timeout=120)
     c.adb('push', str(patch_script), '/data/local/tmp/mac_magisk_patch.sh')

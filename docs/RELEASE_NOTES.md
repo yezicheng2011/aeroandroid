@@ -1,6 +1,6 @@
-## aeroandroid 0.2.1 · macOS DMG (Apple Silicon)
+## aeroandroid 0.2.1 · macOS DMG (Apple Silicon + Intel)
 
-**下载 / Download:** `aeroandroid-0.2.1-macOS-arm64.dmg` — 仅 Apple Silicon（M1–M5），macOS 14+。不支持 Intel Mac / Windows。
+**下载 / Download:** `aeroandroid-0.2.1-macOS-universal.dmg` — Apple 芯片与 Intel Mac（Intel 需 2018 年及以后机型）通用，macOS 14+。不支持 Windows。 / Universal: Apple Silicon and Intel (2018+), macOS 14+. Not Windows.
 
 轻量版：管理程序（Android Subsystem.app）+ 安装脚本 + 源码 + 首次安装说明。安卓运行环境（约 1.8 GB）在安装时从官方源下载，逐个校验 SHA-256（`--mirror cn` 可用国内镜像）。
 

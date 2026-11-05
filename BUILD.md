@@ -2,12 +2,12 @@
 
 
 ### Requirements
-- Apple Silicon Mac (M1–M5), macOS 14 or later
+- Apple Silicon or Intel Mac (2018 or newer), macOS 14 or later
 - Xcode Command Line Tools: `xcode-select --install`
 - `curl`, `unzip`, `tar`, `python3` (shipped with macOS)
 - At least 20 GB free disk; about 1.8 GB of downloads
 
-`build.sh` downloads JDK 17, the Android SDK pieces (platform, build-tools, cmdline-tools, platform-tools, emulator, arm64 system image), Python 3.12 and scrcpy at the versions pinned in `scripts/runtime-lock.json`, checking each SHA-256. No Homebrew or Android Studio needed.
+`build.sh` downloads JDK 17, the Android SDK pieces (platform, build-tools, cmdline-tools, platform-tools, emulator, system image for your chip: arm64 or x86_64), Python 3.12 and scrcpy at the versions pinned in `scripts/runtime-lock.json`, checking each SHA-256. No Homebrew or Android Studio needed.
 
 ### One command
 ```bash
@@ -26,7 +26,7 @@ Flow: check prerequisites → download runtime → unpack a private JDK and buil
 This repository is Apache-2.0. The microG signature module (`microg-spoof/`, derived from FakeGApps) and Magisk's `host_patch.sh` are GPL-3.0 and are not included. Only with `--with-gpl` does `build.sh` download them from upstream (SHA-256 checked) and print a license notice; they remain GPL-3.0 and must not be redistributed as Apache-2.0. Without the flag you get the pure-AOSP graphics edition, without Magisk or microG.
 
 ### Troubleshooting
-- **"Requires an Apple Silicon Mac"**: only arm64 macOS is supported; not Intel Macs or Linux.
+- **"Requires a Mac"**: only macOS is supported, on Apple Silicon or Intel; not Linux or Windows.
 - **Missing Command Line Tools**: `xcode-select --install`, then reopen Terminal.
 - **Slow or failing downloads**: use `--mirror cn` or set `GH_MIRROR=https://ghfast.top/`. Re-running resumes; verified files are skipped.
 - **SHA-256 mismatch**: the mirror served a bad file; the script retries from the official URL. If it still fails, delete that file from `runtime-cache` and re-run.

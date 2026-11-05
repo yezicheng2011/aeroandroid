@@ -270,7 +270,7 @@ def main():
     parser.add_argument('--accept-sdk-license', action='store_true')
     parser.add_argument('--graphics-only', action='store_true', help='Install for graphics acceptance before Magisk root provisioning')
     args = parser.parse_args()
-    if platform.system() != 'Darwin' or platform.machine() != 'arm64': raise RuntimeError('Requires an Apple Silicon Mac')
+    if platform.system() != 'Darwin': raise RuntimeError('Requires a Mac')
     lock = json.loads(Path(os.environ.get('ANDROID_SUBSYSTEM_LOCK') or PROJECT / 'scripts/runtime-lock.json').read_text())
     # A retry with existing dependencies needs space for compilation, not another
     # full SDK extraction. Full provisioning also needs room for Guest userdata.

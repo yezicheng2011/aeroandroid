@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
-[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo 'Build on an Apple Silicon Mac.' >&2; exit 1; }
+[[ "$(uname -s)" == Darwin ]] || { echo 'Build on a Mac.' >&2; exit 1; }
+# Local builds target this Mac. AEROANDROID_UNIVERSAL=1 builds arm64 + x86_64 in one binary (releases).
+archs=()
+if [[ "${AEROANDROID_UNIVERSAL:-0}" == 1 ]]; then archs=(--arch arm64 --arch x86_64); fi
 xcrun --find swift >/dev/null
 if [[ ! -f "$project_root/artifacts/MacBridge.apk" ]]; then "$project_root/scripts/build-guest.sh"; fi
-(cd "$project_root/macos" && swift build -c release -Xlinker -dead_strip)
-bin_path="$(cd "$project_root/macos" && swift build -c release --show-bin-path)"
+(cd "$project_root/macos" && swift build -c release -Xlinker -dead_strip ${archs[@]+"${archs[@]}"})
+bin_path="$(cd "$project_root/macos" && swift build -c release ${archs[@]+"${archs[@]}"} --show-bin-path)"
 app="$project_root/dist/Android Subsystem.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/backend"
 cp "$bin_path/AndroidSubsystem" "$app/Contents/MacOS/AndroidSubsystem"

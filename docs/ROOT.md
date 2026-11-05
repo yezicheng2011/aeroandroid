@@ -44,6 +44,6 @@ Rollback stops the subsystem and removes the boot override; it does not delete t
 - The automated microG signature check and the UI Self-Check pass before testing the apps you need.
 - After root and microG setup, multi-window graphics, IME, focus and notifications still work.
 
-Android 17 will need a new ARM64 image and separate root / microG acceptance; the current pinned configuration is for Android 16 only.
+Android 17 uses Magisk v31.0 (runtime-lock-17.json); Intel Macs use the -x86_64 locks. Neither has had a root / microG acceptance run on real hardware yet.
 
 Sources: [Magisk v30.7 host_patch.sh](https://github.com/topjohnwu/Magisk/blob/v30.7/scripts/host_patch.sh), [official AVD test script](https://github.com/topjohnwu/Magisk/blob/v30.7/scripts/avd.sh).

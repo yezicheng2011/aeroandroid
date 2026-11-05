@@ -5,6 +5,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "$0")" && pwd)"
+source "$project_root/scripts/host.sh"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$project_root/runtime-cache}"
 mirror="auto"          # auto | cn | global
 with_gpl=1
@@ -57,11 +58,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
-lock_file="$project_root/scripts/runtime-lock.json"
 [[ -n "${AEROANDROID_FORCE_ANDROID:-}" ]] && android="$AEROANDROID_FORCE_ANDROID"   # set by the fallback below
-if [[ "$android" == 17 ]]; then lock_file="$project_root/scripts/runtime-lock-17.json"; fi
 export ANDROID_SUBSYSTEM_LOCK="$lock_file"
 case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
+lock_file="$(lock_for "$android")"
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -75,11 +75,11 @@ sha256_of() {
 check_prereqs() {
   local ok=1
   say '检查环境 / Checking prerequisites'
-  if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
-    echo '  ✗ 需要 Apple Silicon Mac / Requires an Apple Silicon Mac (macOS, arm64)'; ok=0
+  if [[ "$(uname -s)" != Darwin ]]; then
+    echo '  ✗ 需要 Mac / Requires a Mac (Apple Silicon or Intel)'; ok=0
   else
     local ver; ver="$(sw_vers -productVersion)"
-    if [[ "${ver%%.*}" -lt 14 ]]; then echo "  ✗ macOS $ver < 14"; ok=0; else echo "  ✓ macOS $ver arm64"; fi
+    if [[ "${ver%%.*}" -lt 14 ]]; then echo "  ✗ macOS $ver < 14"; ok=0; else echo "  ✓ macOS $ver $HOST_ARCH"; fi
     if xcrun --find swift >/dev/null 2>&1; then echo '  ✓ Xcode Command Line Tools'
     else echo '  ✗ Xcode Command Line Tools — run: xcode-select --install'; ok=0; fi
   fi

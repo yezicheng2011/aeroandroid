@@ -33,6 +33,17 @@ class SubsystemError(Exception):
     pass
 
 
+def host_arch():
+    """'arm64' on Apple Silicon (also in a Rosetta shell), 'x86_64' on an Intel Mac."""
+    if platform.machine() == "arm64":
+        return "arm64"
+    try:
+        out = subprocess.run(["/usr/sbin/sysctl", "-in", "hw.optional.arm64"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    return "arm64" if out.strip() == "1" else "x86_64"
+
+
 def atomic_json(path: Path, value):
     temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     try:
@@ -89,6 +100,7 @@ class Controller:
         self.logs = self.root / "logs"
         self.logs.mkdir(exist_ok=True)
         self.runner = runner or subprocess.run
+        self.arch = host_arch()   # which system image and emulator build this Mac runs
         # Quick Boot snapshots are for everyday use only. Provisioning builds a Controller
         # directly and always cold boots, because Magisk modules apply at boot.
         self.quick_boot = False
@@ -158,10 +170,15 @@ class Controller:
         return base / "default" if self.image_tag == "default" else base
 
     @property
+    def abi(self):
+        return "arm64-v8a" if self.arch == "arm64" else "x86_64"
+
+    @property
     def avd(self):
+        tag = "arm64" if self.arch == "arm64" else "x86_64"
         if self.image_tag == "default":
-            return f"MacAndroid_{self.config['android']}_AOSP_arm64"
-        return f"MacAndroid_{self.config['android']}_arm64"
+            return f"MacAndroid_{self.config['android']}_AOSP_{tag}"
+        return f"MacAndroid_{self.config['android']}_{tag}"
 
     @property
     def serial(self):
@@ -274,17 +291,23 @@ class Controller:
 
     def diagnostic(self):
         checks = []
-        checks.append({"name": "Apple Silicon Mac", "ok": platform.system() == "Darwin" and
-                      platform.machine() == "arm64", "detail": platform.platform()})
+        checks.append({"name": "Mac (Apple Silicon or Intel)", "ok": platform.system() == "Darwin",
+                      "detail": f"{platform.platform()} · {self.arch}"})
         for name in ("adb", "emulator", "scrcpy", "sdkmanager", "avdmanager"):
             try:
                 p = self.tool(name)
                 checks.append({"name": name, "ok": True, "detail": p})
             except SubsystemError as e:
                 checks.append({"name": name, "ok": False, "detail": str(e)})
-        image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/arm64-v8a/system.img"
-        checks.append({"name": f"Android {self.config['android']} ARM64 image", "ok": image.exists(),
+        image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
+        checks.append({"name": f"Android {self.config['android']} {self.abi} image", "ok": image.exists(),
                       "detail": str(image)})
+        try:
+            if self.device():   # which app CPU types Android runs: an Intel Mac needs ARM translation for arm64-only apps
+                abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip()
+                checks.append({"name": "Android CPU types (apps)", "ok": bool(abis), "detail": abis or "unknown"})
+        except SubsystemError:
+            pass
         try:
             result = self.run([self.tool("emulator"), "-accel-check"], check=False)
             checks.append({"name": "Hardware acceleration", "ok": result.returncode == 0,
@@ -322,11 +345,11 @@ class Controller:
                 raise SubsystemError("Legacy Google image is retained only for migration; select the AOSP runtime")
             if self.configured():
                 return {"avd": self.avd, "created": False}
-            image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/arm64-v8a/system.img"
+            image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
             if not image.is_file():
                 raise SubsystemError(f"Android {self.config['android']} image missing. Run setup-mac.sh {self.config['android']}")
             self.run([self.tool("avdmanager"), "--verbose", "create", "avd", "--name", self.avd,
-                      "--package", f"system-images;android-{self.image_api};{self.image_tag};arm64-v8a",
+                      "--package", f"system-images;android-{self.image_api};{self.image_tag};{self.abi}",
                       "--path", str(self.avd_home / f"{self.avd}.avd")], timeout=90, input="no\n")
             config_file = self.avd_home / f"{self.avd}.avd/config.ini"
             settings = dict(line.split("=", 1) for line in config_file.read_text().splitlines()
@@ -374,8 +397,8 @@ class Controller:
         return bool(record) and self.process_matches(record)
 
     def boot(self):
-        if platform.system() != "Darwin" or platform.machine() != "arm64":
-            raise SubsystemError("This runtime requires an Apple Silicon Mac (M1–M5)")
+        if platform.system() != "Darwin":
+            raise SubsystemError("This runtime requires a Mac")
         self.create()
         with self.locked():
             active = self.device()
