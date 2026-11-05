@@ -67,6 +67,10 @@ class Android17Tests(unittest.TestCase):
             self.assertIn('x86_64', by_kind['scrcpy']['name'])
             self.assertIn('x86_64-apple-darwin', by_kind['python']['name'])
             self.assertIn('x86_64', by_kind['cmdline-tools']['name'])
+            translation = by_kind['arm_translation']      # Google's image, the source of the ARM translator
+            self.assertIn('google_apis', translation['url'])
+            self.assertTrue(translation['relative_path'].startswith('provision/'))   # only downloaded for the full edition
+            self.assertEqual(lock['arch'], 'x86_64')
             self.assertTrue(all(HEX.fullmatch(e['sha256']) for e in lock['archives']))
             # Nothing architecture-neutral changed: same platform, build tools, root and microG pins.
             keep = ('platforms', 'build-tools', 'platform-tools', 'magisk', 'microg_services', 'microg_companion', 'vector')

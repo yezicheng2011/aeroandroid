@@ -12,6 +12,7 @@ with_gpl=1
 android=17
 download_only=0
 check_only=0
+arm_translation=1
 gh_mirror="${GH_MIRROR:-https://gh-proxy.com/}"
 sdk_mirror="${SDK_MIRROR:-https://mirrors.cloud.tencent.com/AndroidSDK/}"
 google_base="https://dl.google.com/android/repository/"
@@ -36,11 +37,13 @@ Usage: ./build.sh [options]
                            the GPL-3.0 parts (microG signature module, Magisk
                            host_patch.sh) from upstream. --with-gpl is accepted
                            as an alias.
+  --no-arm-translation     Intel Macs only: skip ARM translation (saves a 2 GB download and
+                           8 GB of disk) and with it support for arm64-only apps.
   --download-only          Only fill ./runtime-cache, do not install.
   --check                  Only check prerequisites.
   -h, --help               Show this help.
 
-Environment: GH_MIRROR, SDK_MIRROR, ANDROID_SUBSYSTEM_CACHE.
+Environment: GH_MIRROR, SDK_MIRROR, FDROID_MIRROR, ANDROID_SUBSYSTEM_CACHE.
 USAGE
 }
 
@@ -50,6 +53,7 @@ while [[ $# -gt 0 ]]; do
     --mirror=*) mirror="${1#*=}"; shift ;;
     --with-gpl) with_gpl=1; shift ;;
     --pure) with_gpl=0; shift ;;
+    --no-arm-translation) arm_translation=0; shift ;;
     --android) android="${2:-}"; shift 2 ;;
     --android=*) android="${1#*=}"; shift ;;
     --download-only) download_only=1; shift ;;
@@ -59,7 +63,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "${AEROANDROID_FORCE_ANDROID:-}" ]] && android="$AEROANDROID_FORCE_ANDROID"   # set by the fallback below
-export ANDROID_SUBSYSTEM_LOCK="$lock_file"
+export ANDROID_SUBSYSTEM_LOCK="$lock_file" AEROANDROID_ARM_TRANSLATION="$arm_translation"
 case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
 lock_file="$(lock_for "$android")"
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
@@ -133,12 +137,14 @@ fetch_runtime() {
   local line url rel sha
   while IFS=$'\t' read -r url rel sha; do
     line="$rel"; fetch "$url" "$cache/$line" "$sha"
-  done < <(python3 - "$lock" "$with_gpl" <<'PY'
+  done < <(python3 - "$lock" "$with_gpl" "$arm_translation" <<'PY'
 import json, sys
 lock = json.load(open(sys.argv[1]))
 full = sys.argv[2] == '1'
 for a in lock['archives']:
     if not full and a['relative_path'].startswith('provision/'):
+        continue
+    if a.get('kind') == 'arm_translation' and sys.argv[3] != '1':
         continue
     print(a['url'], a['relative_path'], a['sha256'], sep='\t')
 PY
@@ -237,12 +243,14 @@ intel_notice() {
   ──────────────────────────────────────────────────────────────────────
   Intel Mac detected / 检测到 Intel Mac
   Android runs here as x86_64. Many Android apps, especially most 3D games,
-  ship only arm64 code and will NOT install or run. Apps written in plain
-  Java/Kotlin and apps with x86_64 code work. It is also slower than on
-  Apple Silicon.
+  ship only arm64 code and need ARM translation to run. The full install adds
+  it (one extra ~2 GB download from Google, slower than native). With --pure
+  or --no-arm-translation those apps will NOT install. Plain Java/Kotlin apps
+  and apps with x86_64 code are not affected.
   这里的安卓以 x86_64 运行。很多安卓应用，尤其是大多数 3D 游戏，只含 arm64
-  代码，将无法安装或运行；纯 Java/Kotlin 应用和带 x86_64 代码的应用可用。
-  速度也低于 Apple 芯片的 Mac。
+  代码，需要「ARM 翻译」才能运行。完整版安装会自动加入（多下载约 2 GB，比原生
+  慢）；使用 --pure 或 --no-arm-translation 时这些应用将无法安装。纯 Java/Kotlin
+  应用和带 x86_64 代码的应用不受影响。
   ──────────────────────────────────────────────────────────────────────
 
 NOTICE
@@ -253,6 +261,8 @@ main() {
   check_prereqs || { [[ "$check_only" == 1 ]] && exit 1; die '环境检查未通过 / prerequisites missing'; }
   [[ "$check_only" == 1 ]] && { say '环境检查通过 / All prerequisites OK'; exit 0; }
   pick_mirror
+  # Pre-installed apps come from F-Droid; these mirrors carry identical files, and every APK is SHA-256 pinned.
+  if [[ "$mirror" == cn ]]; then export FDROID_MIRROR="${FDROID_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/fdroid/repo/ https://mirror.nju.edu.cn/fdroid/repo/}"; fi
   fetch_runtime
   if [[ "$with_gpl" == 1 ]]; then fetch_gpl; fi
   if [[ "$download_only" == 1 ]]; then say "运行时已就绪 / Runtime cache ready: $cache"; exit 0; fi

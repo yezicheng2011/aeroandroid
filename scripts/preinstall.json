@@ -1,5 +1,5 @@
 {
-  "_comment": "Extra apps installed into every new subsystem, pinned by APK and signing-certificate SHA-256 (from the F-Droid index, cross-checked against each APK's own signature). F-Droid keeps only recent versions: if a download 404s, re-pin with: python3 scripts/preinstall-apps.py --pin <https APK url>. microG is installed by provision-microg.py, not listed here.",
+  "_comment": "Extra apps installed into every new subsystem, pinned by APK and signing-certificate SHA-256; an entry with an `abi` is used only on a system that can run that CPU type, and the first listed CPU type wins (from the F-Droid index, cross-checked against each APK's own signature). F-Droid keeps only recent versions: if a download 404s, re-pin with: python3 scripts/preinstall-apps.py --pin <https APK url>. microG is installed by provision-microg.py, not listed here.",
   "apps": [
     {
       "name": "Aurora Store",
@@ -11,8 +11,17 @@
     {
       "name": "Fennec (Firefox)",
       "package": "org.mozilla.fennec_fdroid",
+      "abi": "arm64-v8a",
       "url": "https://f-droid.org/repo/org.mozilla.fennec_fdroid_1590020.apk",
       "sha256": "a1bbb21a1330cd08e48e8bf1220a7412c968b1bf32fbd029c7d771728ba73a32",
+      "signer_sha256": "06665358efd8ba05be236a47a12cb0958d7d75dd939d77c2b31f5398537ebdc5"
+    },
+    {
+      "name": "Fennec (Firefox)",
+      "package": "org.mozilla.fennec_fdroid",
+      "abi": "x86_64",
+      "url": "https://f-droid.org/repo/org.mozilla.fennec_fdroid_1590010.apk",
+      "sha256": "832f236ebd163b808ee280f718ba02d0744da5ec6d10b69306563907aee9040d",
       "signer_sha256": "06665358efd8ba05be236a47a12cb0958d7d75dd939d77c2b31f5398537ebdc5"
     }
   ]

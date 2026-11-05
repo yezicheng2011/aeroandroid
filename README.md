@@ -73,18 +73,45 @@ One executable plays three roles, chosen by its `Info.plist`:
 
 ## Intel Macs
 
-An Intel Mac gets everything above. `build.sh` detects the chip (also when run in a Rosetta shell on Apple Silicon)
-and installs the x86_64 emulator, system image, JDK, scrcpy and Python, each pinned by SHA-256 in
-`scripts/runtime-lock-x86_64.json` / `runtime-lock-17-x86_64.json`. Magisk, Vector and microG already ship x86_64
-code. The release DMG is a universal binary.
+An Intel Mac gets everything above. `build.sh` detects the chip (also in a Rosetta shell on Apple Silicon) and installs
+the x86_64 emulator, system image, JDK, scrcpy and Python, each pinned by SHA-256 in `scripts/runtime-lock-x86_64.json`
+and `runtime-lock-17-x86_64.json`. The release DMG is a universal binary.
 
-- **Android apps with arm64-only native code.** Many games ship only arm64 libraries. Whether the stock x86_64 image
-  translates them is not confirmed: after the first boot, Settings → Check runtime environment shows the system's
-  CPU types ("Android CPU types"). If `arm64-v8a` is not listed, those apps will not run on an Intel Mac.
-- **Warning.** On an Intel Mac, `build.sh` prints this notice, the app shows it the first time it opens, and an app that
-  cannot run because of its CPU type is refused with a plain explanation instead of a cryptic install error.
-- **Speed.** Intel Macs run the x86_64 guest with the hypervisor too, but expect less performance than Apple Silicon.
-- **Not tested on an Intel Mac.** Written and checked without one.
+**ARM translation.** Many Android apps, and most games, ship only arm64 code. The stock x86_64 Android image cannot
+run them, so the full install adds a translator:
+
+- It is AOSP's own open-source ARM-to-x86 binary translator (`libndk_translation`, "berberis", Apache-2.0).
+- Google's "Google APIs" x86_64 image contains it, so `build.sh` downloads that image (about 2 GB, once) and
+  `scripts/arm_translation.py` copies out only the translator and the system properties that turn it on. None of
+  Google's apps or services are installed; the image is then discarded.
+- It is installed as a Magisk module, so it needs the full edition (root). After a cold boot,
+  `scripts/provision-arm-translation.py` runs a real arm64 program through it and refuses to report success otherwise.
+- Skip it with `./build.sh --no-arm-translation` (saves the 2 GB download and 8 GB of disk). With `--pure` or
+  `--no-arm-translation`, arm64-only apps are refused with a plain explanation.
+- Apps translated this way are slower than native ones. Apps with x86_64 code, and the pre-installed Fennec
+  (an x86_64 build is chosen automatically), run natively.
+
+**Not run end to end on a Mac.** I checked the pieces against Google's real Android 16 and 17 images and booted
+the result in an emulator: the translator files and the 14 properties were identical to Google's image, root and
+the module installed, and Android listed `arm64-v8a`. The emulator available to me has no hardware acceleration, so an
+arm64 program crashed inside the translator there, exactly as on Google's own image; only a Mac can show it running.
+On an Intel Mac, the first run prints a notice, and Settings → Check runtime environment lists the CPU types.
+
+## Restricted networks (for example mainland China)
+
+Google's download servers are slow or unreachable in some countries, which would make the install fail. Pass
+`--mirror cn`, or let `build.sh` choose: when `dl.google.com` or GitHub does not answer within a few seconds, it picks
+mirrors itself.
+
+| Source | Where it goes instead |
+|--------|-----------------------|
+| Android SDK, emulator, system images (including the translator image) | `mirrors.cloud.tencent.com/AndroidSDK` (`SDK_MIRROR`) |
+| GitHub releases (Magisk, Vector, microG, JDK, scrcpy, Python) | a GitHub proxy (`GH_MIRROR`) |
+| Pre-installed apps (F-Droid) | Tsinghua and NJU F-Droid mirrors (`FDROID_MIRROR`) |
+
+A mirror only changes where the bytes come from: every file is checked against its pinned SHA-256, and the official
+address is tried as a fallback, so a bad mirror cannot slip in a different file. Set the three variables to point
+anywhere else in the world. Mirrors that serve identical files were checked for the Android SDK and F-Droid.
 
 ## Gaming
 
@@ -109,7 +136,7 @@ that every Google API, Play Integrity or banking app works. See [docs/MICROG.md]
 
 ## Known limits
 
-- macOS 14+ on Apple Silicon or Intel. Android 17 (default) or 16, AOSP. Android 17 root and microG are new and untested on a Mac.
+- macOS 14+ on Apple Silicon or Intel. Android 17 (default) or 16, AOSP. Android 17 root and microG, and Intel ARM translation, are new and untested on a Mac.
 - The subsystem keeps running in the background after you close an app's window; stop it from the menu bar item.
 - Camera: the Mac camera is passed to the emulator as `webcam0` for both the front and back camera.
   macOS asks for camera permission the first time.

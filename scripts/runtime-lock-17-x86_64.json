@@ -128,6 +128,17 @@
       "sha256": "9ee8323575d615f7b3f1076ff60b2a63a49390ef11881b52632311a37f6f79cc",
       "relative_path": "provision/Vector-v2.2-3080-Release.zip",
       "sha1": "dec58ca31ce381d1da0b4bf4953835ea5ac9dcfd"
+    },
+    {
+      "kind": "arm_translation",
+      "name": "x86_64-37.0_r08.zip",
+      "url": "https://dl.google.com/android/repository/sys-img/google_apis/x86_64-37.0_r08.zip",
+      "sha256": "75ed072b88f9bb7edde0e3d22427deddbdad8be168b058a79269b55de40f6f25",
+      "size": 2143899425,
+      "host": "macosx",
+      "source_package": "system-images;android-37.0;google_apis;x86_64",
+      "relative_path": "provision/arm-translation/x86_64-37.0_r08.zip"
     }
-  ]
+  ],
+  "arch": "x86_64"
 }
