@@ -4,11 +4,12 @@ project_root="$(cd "$(dirname "$0")/.." && pwd)"
 [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo 'Build on an Apple Silicon Mac.' >&2; exit 1; }
 xcrun --find swift >/dev/null
 if [[ ! -f "$project_root/artifacts/MacBridge.apk" ]]; then "$project_root/scripts/build-guest.sh"; fi
-(cd "$project_root/macos" && swift build -c release)
+(cd "$project_root/macos" && swift build -c release -Xlinker -dead_strip)
 bin_path="$(cd "$project_root/macos" && swift build -c release --show-bin-path)"
 app="$project_root/dist/Android Subsystem.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/backend"
 cp "$bin_path/AndroidSubsystem" "$app/Contents/MacOS/AndroidSubsystem"
+strip -x "$app/Contents/MacOS/AndroidSubsystem"   # smaller download; the app has no use for local symbols
 cp "$project_root/backend/subsystem.py" "$app/Contents/Resources/backend/"
 cp "$project_root/artifacts/MacBridge.apk" "$app/Contents/Resources/"
 cp "$project_root/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
@@ -40,7 +41,7 @@ PLIST
 # as its own Mac app, without showing the manager window. Same executable, different role.
 helper="$app/Contents/Helpers/APK Installer.app"
 mkdir -p "$helper/Contents/MacOS" "$helper/Contents/Resources"
-cp "$bin_path/AndroidSubsystem" "$helper/Contents/MacOS/AndroidSubsystem"
+cp "$app/Contents/MacOS/AndroidSubsystem" "$helper/Contents/MacOS/AndroidSubsystem"
 cp "$project_root/assets/AppIcon.icns" "$helper/Contents/Resources/AppIcon.icns"
 cat > "$helper/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

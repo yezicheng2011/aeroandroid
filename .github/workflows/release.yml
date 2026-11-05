@@ -89,17 +89,20 @@ jobs:
           v="${{ steps.v.outputs.version }}"
           mkdir -p dmgroot/aeroandroid-source out
           git archive HEAD | tar -x -C dmgroot/aeroandroid-source
-          rm -rf dmgroot/aeroandroid-source/.github dmgroot/aeroandroid-source/packaging
+          rm -rf dmgroot/aeroandroid-source/.github dmgroot/aeroandroid-source/packaging dmgroot/aeroandroid-source/docs/original
+          # Not needed to build or install: unit tests and the full-size logo (the app carries AppIcon.icns).
+          rm -f dmgroot/aeroandroid-source/tests/test_*.py dmgroot/aeroandroid-source/tests/fake_runtime.py dmgroot/aeroandroid-source/assets/logo-1024.png
           ditto "dist/Android Subsystem.app" "dmgroot/Android Subsystem.app"
           cp "packaging/dmg/安装 aeroandroid.command" "packaging/dmg/首次安装说明 README-FIRST.txt" LICENSE NOTICE dmgroot/
           chmod +x "dmgroot/安装 aeroandroid.command"
           # No GPL parts: microg-spoof/ and third_party/Magisk/ are not in git.
           test ! -e dmgroot/aeroandroid-source/microg-spoof && test ! -e dmgroot/aeroandroid-source/third_party/Magisk
           xattr -cr dmgroot
-          hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "out/aeroandroid-$v-macOS-arm64.dmg"
+          hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format ULMO -ov "out/aeroandroid-$v-macOS-arm64.dmg"
           # Ad-hoc sign the disk image too (free, no Apple Developer account).
           codesign --force --timestamp=none --sign - "out/aeroandroid-$v-macOS-arm64.dmg"
           codesign --verify --verbose=2 "out/aeroandroid-$v-macOS-arm64.dmg"
+          ls -l out/ | awk '{print "DMG size:", $5, "bytes", $9}'
           mnt="$(hdiutil attach -nobrowse -readonly "out/aeroandroid-$v-macOS-arm64.dmg" | awk -F'\t' '/\/Volumes\// {print $NF}' | tail -1)"
           echo "mounted at $mnt"; ls -la "$mnt"
           codesign --verify --deep --strict "$mnt/Android Subsystem.app"
