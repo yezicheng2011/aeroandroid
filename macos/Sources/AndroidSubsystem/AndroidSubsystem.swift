@@ -31,9 +31,7 @@ final class Backend {
         // JSON is passed as a process argument, never interpolated into a shell command.
         let request = try JSONSerialization.data(withJSONObject: params)
         let encoded = String(decoding: request, as: UTF8.self)
-        guard let resources = Bundle.main.resourceURL else {
-            throw BridgeFailure(message: L10n.t("err.missing_resources"))
-        }
+        let resources = AppBundle.manager.appendingPathComponent("Contents/Resources")
         let script = resources.appendingPathComponent("backend/subsystem.py")
         guard FileManager.default.fileExists(atPath: script.path) else {
             throw BridgeFailure(message: L10n.t("err.missing_controller"))
@@ -626,7 +624,6 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-@main
 struct AndroidSubsystemApp: App {
     @StateObject private var model = SubsystemModel()
     private let notificationDelegate = NotificationDelegate()
@@ -635,6 +632,7 @@ struct AndroidSubsystemApp: App {
             MainView().environmentObject(model).onAppear {
                 notificationDelegate.launch = { package in model.launchPackage(package) }
                 UNUserNotificationCenter.current().delegate = notificationDelegate
+                ApkHandler.registerOnce()
             }
         }
         .commands {

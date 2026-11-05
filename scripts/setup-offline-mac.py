@@ -245,6 +245,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         if not graphics_only:
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-mac.py'), str(cache)], env=env, check=True)
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-microg.py'), str(cache)], env=env, check=True)
+            subprocess.run([sys.executable, str(PROJECT / 'scripts/preinstall-apps.py'), str(cache)], env=env, check=True)
             retire_legacy_google_image(root)
         app_folder = Path.home() / 'Applications'
         app_folder.mkdir(exist_ok=True)

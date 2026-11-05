@@ -57,8 +57,9 @@ jobs:
       - name: Check architecture (arm64)
         run: |
           app="dist/Android Subsystem.app"
-          lipo -info "$app/Contents/MacOS/AndroidSubsystem" "$app/Contents/Resources/AndroidEntry"
-          for f in "$app/Contents/MacOS/AndroidSubsystem" "$app/Contents/Resources/AndroidEntry"; do
+          helper="$app/Contents/Helpers/APK Installer.app/Contents/MacOS/AndroidSubsystem"
+          lipo -info "$app/Contents/MacOS/AndroidSubsystem" "$helper"
+          for f in "$app/Contents/MacOS/AndroidSubsystem" "$helper"; do
             lipo -archs "$f" | grep -qw arm64 || { echo "::error::not arm64: $f"; exit 1; }
           done
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist"
@@ -66,7 +67,7 @@ jobs:
         run: |
           app="dist/Android Subsystem.app"
           xattr -cr "$app"
-          codesign --force --timestamp=none --sign - "$app/Contents/Resources/AndroidEntry"
+          codesign --force --timestamp=none --sign - "$app/Contents/Helpers/APK Installer.app"
           codesign --force --deep --timestamp=none --sign - "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/cs.txt

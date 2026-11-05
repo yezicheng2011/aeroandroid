@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import plistlib
 from pathlib import Path
 import signal
 import socket
@@ -22,7 +23,7 @@ class IntegrationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.sdk = self.root / 'sdk with spaces'
         self.fixture = Path(__file__).with_name('fake_runtime.py')
-        for location in ['platform-tools/adb', 'emulator/emulator', 'cmdline-tools/latest/bin/avdmanager', 'cmdline-tools/latest/bin/sdkmanager']:
+        for location in ['platform-tools/adb', 'emulator/emulator', 'cmdline-tools/latest/bin/avdmanager', 'cmdline-tools/latest/bin/sdkmanager', 'build-tools/36.0.0/aapt2']:
             tool = self.sdk / location; tool.parent.mkdir(parents=True, exist_ok=True)
             tool.write_bytes(self.fixture.read_bytes()); tool.chmod(0o755)
         image = self.sdk / 'system-images/android-36/default/arm64-v8a/system.img'
@@ -70,6 +71,44 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.controller.status()['state'], 'stopped')
         self.assertTrue(self.controller.configured())
         self.assertEqual(self.controller.boot()['state'], 'running')
+        self.controller.stop()
+
+    def test_install_app_builds_a_dock_ready_mac_app_with_the_android_icon(self):
+        passthrough = subprocess.run
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0, '', '')
+                                                    if argv[0].startswith('/usr/bin/') else passthrough(argv, **kw))
+        app = self.root / 'Android Subsystem.app'
+        (app / 'Contents/MacOS').mkdir(parents=True)
+        (app / 'Contents/MacOS/AndroidSubsystem').write_bytes(b'binary')
+        apk = self.root / 'fixture.apk'; apk.write_bytes(b'test')
+        apps = self.root / 'Applications'
+        result = self.controller.install_app([str(apk)], str(app), str(apps))
+        self.assertEqual((result['package'], result['label']), ('com.example.fixture', 'Fixture App'))
+        launcher = Path(result['launcher'])
+        self.assertEqual(launcher, apps / 'Fixture App.app')
+        info = plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())
+        self.assertEqual((info['AndroidPackage'], info['CFBundleIconFile']), ('com.example.fixture', 'AppIcon'))
+        self.assertNotIn('LSUIElement', info)   # a normal app: it has a Dock icon of its own
+        icns = (launcher / 'Contents/Resources/AppIcon.icns').read_bytes()
+        self.assertEqual((icns[:4], int.from_bytes(icns[4:8], 'big'), icns[8:12]), (b'icns', len(icns), b'ic09'))
+        self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'binary')
+        # Installing again (an update) refreshes the same app; a foreign folder is never overwritten.
+        self.assertEqual(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'], str(launcher))
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'already exists'):
+            self.controller.export_launcher('com.example.other', 'Fixture App', str(app), str(apps), replace=True)
+        with self.assertRaisesRegex(subsystem.SubsystemError, '512x512'):
+            subsystem.icns_from_png(b'not a png')
+        self.controller.stop()
+
+    def test_mac_camera_is_passed_through_only_when_one_is_connected(self):
+        self.controller.boot()
+        self.assertNotIn('-camera-back', json.loads((self.root / 'emulator-argv.json').read_text()))
+        self.controller.stop()
+        (self.root / 'webcam').touch()
+        self.controller.boot()
+        args = json.loads((self.root / 'emulator-argv.json').read_text())
+        self.assertEqual(args[args.index('-camera-back') + 1], 'webcam0')
+        self.assertEqual(args[args.index('-camera-front') + 1], 'webcam0')
         self.controller.stop()
 
     def test_native_bridge_reuses_authenticated_service_and_cleans_forward(self):

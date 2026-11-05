@@ -2,12 +2,20 @@
 """Deterministic external-process fixture; never used by the actual application."""
 import base64
 import json
+import struct
+import zlib
 import os
 from pathlib import Path
 import shlex
 import signal
 import sys
 import time
+
+def png512():
+    chunk = lambda kind, body: struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+    rows = b''.join(b'\0' + b'\x20\x80\xc0\xff' * 512 for _ in range(512))
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 512, 512, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
+
 
 name = Path(sys.argv[0]).name
 root = Path(os.environ['TEST_RUNTIME_ROOT'])
@@ -21,6 +29,9 @@ if name == 'avdmanager':
     (Path(os.environ['ANDROID_AVD_HOME']) / (avd + '.ini')).write_text('path=' + str(path))
 elif name == 'emulator':
     if '-accel-check' in args: print('Hypervisor test fixture'); sys.exit(0)
+    if args == ['-webcam', 'list']:
+        if (root / 'webcam').exists(): print("List of web cameras connected to the computer:\n Camera 'webcam0' is connected to device 'FaceTime HD Camera'.")
+        sys.exit(0)
     avd = args[args.index('-avd') + 1]
     (root / 'emulator-argv.json').write_text(json.dumps(args))
     state_path.write_text(json.dumps({'avd': avd, 'pid': os.getpid(), 'api': str(int(avd.split('_')[1]) + 20)}))
@@ -53,6 +64,7 @@ elif name == 'adb':
         elif command[:2] == ['content', 'query']:
             endpoint = command[-1].rsplit('/', 1)[-1]
             if endpoint == 'apps': data = {'apps': [{'package': 'com.example.first', 'label': 'First'}, {'package': 'com.example.second', 'label': 'Second'}]}
+            elif endpoint.startswith('icon?package='): data = {'icon': base64.b64encode(png512()).decode()}
             elif endpoint == 'notifications': data = {'notifications': [{'id': 'one', 'key': 'one', 'title': 'Hello', 'body': 'World', 'package': 'com.example.first', 'timestamp': 1}]}
             else: data = {'notification_access': True}
             print('Row: 0 payload=' + base64.b64encode(json.dumps(data).encode()).decode())
@@ -69,4 +81,6 @@ elif name == 'scrcpy':
     else:
         with (root / 'windows.jsonl').open('a') as f: f.write(json.dumps(args) + '\n')
         while True: time.sleep(0.1)
+elif name == 'aapt2':
+    print("package: name='com.example.fixture' versionCode='1'\napplication-label:'Fixture App'\napplication-label-zh-CN:'示例'\nlaunchable-activity: name='com.example.Main'")
 elif name == 'sdkmanager': print('fake sdkmanager')

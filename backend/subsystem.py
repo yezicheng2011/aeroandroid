@@ -59,6 +59,17 @@ def package_name(value):
     return value
 
 
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def icns_from_png(png):
+    """Wrap one 512x512 PNG as a macOS .icns (type ic09); Finder and the Dock scale it."""
+    if not png.startswith(PNG_MAGIC) or len(png) < 33 or int.from_bytes(png[16:24], "big") != (512 << 32 | 512):
+        raise SubsystemError("The app icon must be a 512x512 PNG")
+    entry = b"ic09" + (len(png) + 8).to_bytes(4, "big") + png
+    return b"icns" + (len(entry) + 8).to_bytes(4, "big") + entry
+
+
 def shared_path(value):
     """Restrict guest file operations to the designated exchange directory."""
     if not isinstance(value, str) or not value.startswith("/sdcard/Download/MacBridge/"):
@@ -317,6 +328,14 @@ class Controller:
             config_file.write_text("\n".join(f"{k}={v}" for k, v in settings.items()) + "\n")
             return {"avd": self.avd, "created": True}
 
+    def webcam_flags(self):
+        """Show the Mac's camera to Android's camera app when one is connected."""
+        try:
+            listing = self.run([self.tool("emulator"), "-webcam", "list"], timeout=20, check=False).stdout
+        except SubsystemError:
+            return []
+        return ["-camera-back", "webcam0", "-camera-front", "webcam0"] if "webcam0" in listing else []
+
     def process_matches(self, record):
         pid = record.get("pid", 0)
         if type(pid) is not int or pid <= 1:
@@ -355,7 +374,7 @@ class Controller:
                 argv = [self.tool("emulator"), "-avd", self.avd, "-port", str(self.config["port"]),
                         "-no-window", "-no-boot-anim", "-gpu", "auto", "-accel", "on",
                         "-memory", str(self.config["memory_mb"]), "-cores", str(self.config["cores"]),
-                        "-no-snapshot", "-no-metrics"]
+                        "-no-snapshot", "-no-metrics", *self.webcam_flags()]
                 if self.config.get("magisk_ramdisk"):
                     ramdisk = Path(self.config["magisk_ramdisk"]).resolve()
                     expected_dir = self.magisk_image_dir.resolve()
@@ -634,6 +653,31 @@ class Controller:
         except (ValueError, UnicodeError) as e:
             raise SubsystemError("Invalid companion response") from e
 
+    def app_icon(self, package):
+        """512x512 PNG of an installed app's launcher icon, rendered by the guest bridge."""
+        package_name(package)
+        result = self.adb("shell", "content", "query", "--uri", f"content://{AUTHORITY}/icon?package={package}")
+        match = re.search(r"payload=([A-Za-z0-9+/=]+)", result.stdout)
+        if not match:
+            raise SubsystemError("Mac Bridge companion unavailable")
+        try:
+            return base64.b64decode(json.loads(base64.b64decode(match[1], validate=True))["icon"], validate=True)
+        except (ValueError, KeyError, TypeError) as e:
+            raise SubsystemError("Invalid companion response") from e
+
+    def apk_info(self, files):
+        """Package name and label of an APK (the first split that is launchable), via aapt2."""
+        tools = sorted(self.sdk.glob("build-tools/*/aapt2"))
+        if not tools:
+            raise SubsystemError("Missing aapt2. Run scripts/setup-mac.sh first.")
+        for path in files:
+            out = self.run([str(tools[-1]), "dump", "badging", str(path)], timeout=60, check=False).stdout
+            package = re.search(r"^package: name='([^']+)'", out, re.MULTILINE)
+            if package and "launchable-activity:" in out and PACKAGE.fullmatch(package[1]):
+                labels = dict(re.findall(r"^application-label(?:-([A-Za-z-]+))?:'(.*)'$", out, re.MULTILINE))
+                return {"package": package[1], "label": labels.get("") or package[1]}
+        raise SubsystemError("This APK has no launchable app")
+
     def notifications(self):
         self.ready()
         data = self.bridge("notifications")
@@ -644,30 +688,49 @@ class Controller:
         # Permission is granted through Android's own settings UI.
         return self.launch(COMPANION, "Mac Bridge · 通知设置")
 
-    def export_launcher(self, package, label, app_path, destination):
+    def export_launcher(self, package, label, app_path, destination, replace=False):
+        """A real Mac app for one Android app: own Dock icon, opens only that app's window."""
         package_name(package)
         app = Path(app_path).resolve()
-        helper = app / "Contents/Resources/AndroidEntry"
-        if not helper.is_file():
+        binary = app / "Contents/MacOS/AndroidSubsystem"
+        if not binary.is_file():
             raise SubsystemError("Build the Mac app before exporting launchers")
         folder = Path(destination).expanduser().resolve()
         folder.mkdir(parents=True, exist_ok=True)
         safe = re.sub(r"[^\w .-]", "_", label, flags=re.UNICODE).strip(" .")[:60] or package
-        target = folder / f"{safe} ({package}).app"
+        target = folder / f"{safe}.app"
         if target.exists():
-            raise SubsystemError("This launcher already exists")
+            existing = {}
+            with contextlib.suppress(OSError, ValueError, plistlib.InvalidFileException):
+                existing = plistlib.loads((target / "Contents/Info.plist").read_bytes())
+            if not replace or existing.get("AndroidPackage") != package:
+                raise SubsystemError("This launcher already exists")
+            shutil.rmtree(target)
+        icon = icns_from_png(self.app_icon(package))
         contents = target / "Contents"
         (contents / "MacOS").mkdir(parents=True)
-        shutil.copy2(helper, contents / "MacOS/AndroidEntry")
-        info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.entry." + package,
-                "CFBundleName": label, "CFBundleDisplayName": label,
-                "CFBundleExecutable": "AndroidEntry", "CFBundlePackageType": "APPL",
-                "CFBundleVersion": "1", "LSMinimumSystemVersion": "14.0",
-                "LSUIElement": True, "AndroidPackage": package, "SubsystemAppPath": str(app)}
+        (contents / "Resources").mkdir()
+        shutil.copy2(binary, contents / "MacOS/AndroidSubsystem")
+        (contents / "Resources/AppIcon.icns").write_bytes(icon)
+        info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.app." + package,
+                "CFBundleName": label, "CFBundleDisplayName": label, "CFBundleIconFile": "AppIcon",
+                "CFBundleExecutable": "AndroidSubsystem", "CFBundlePackageType": "APPL",
+                "CFBundleVersion": "1", "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
+                "NSCameraUsageDescription": "This Android app can use the Mac camera.",
+                "AndroidPackage": package, "SubsystemAppPath": str(app)}
         with (contents / "Info.plist").open("wb") as f:
             plistlib.dump(info, f)
         self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(target)])
+        self.run(["/usr/bin/touch", str(target)], check=False)   # make Finder and the Dock reread the icon
         return {"launcher": str(target)}
+
+    def install_app(self, files, app_path, destination):
+        """Install APK(s) and leave a ready-to-open Mac app for them in `destination`."""
+        paths = [Path(p).expanduser().resolve() for p in files] if isinstance(files, list) else []
+        info = self.apk_info(paths) if paths else None
+        installed = self.install(files)
+        launcher = self.export_launcher(info["package"], info["label"], app_path, destination, replace=True)
+        return {**installed, **info, **launcher}
 
 
 def dispatch(controller, action, params):
@@ -680,7 +743,8 @@ def dispatch(controller, action, params):
              "uninstall": lambda: controller.uninstall(params["package"]), "push": lambda: controller.push(params["files"]),
              "files": lambda: controller.files(), "pull": lambda: controller.pull(params["remote"], params["destination"]),
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
-             "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"])}
+             "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
+             "install-app": lambda: controller.install_app(params["files"], params["app_path"], params["destination"])}
     if action not in table:
         raise SubsystemError("Unknown action")
     return table[action]()

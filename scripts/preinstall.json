@@ -1,0 +1,19 @@
+{
+  "_comment": "Extra apps installed into every new subsystem, pinned by APK and signing-certificate SHA-256 (from the F-Droid index, cross-checked against each APK's own signature). F-Droid keeps only recent versions: if a download 404s, re-pin with: python3 scripts/preinstall-apps.py --pin <https APK url>. microG is installed by provision-microg.py, not listed here.",
+  "apps": [
+    {
+      "name": "Aurora Store",
+      "package": "com.aurora.store",
+      "url": "https://f-droid.org/repo/com.aurora.store_76.apk",
+      "sha256": "fd9c75d90d0f4a7c132b9b4a5a2cf1992a45e03b8d8ff988b7dcfbc0db2c4d11",
+      "signer_sha256": "5c83c7672b929955dc0a1db89a5e6ae4389e2eae7ec939956041694e5815f532"
+    },
+    {
+      "name": "Fennec (Firefox)",
+      "package": "org.mozilla.fennec_fdroid",
+      "url": "https://f-droid.org/repo/org.mozilla.fennec_fdroid_1590020.apk",
+      "sha256": "a1bbb21a1330cd08e48e8bf1220a7412c968b1bf32fbd029c7d771728ba73a32",
+      "signer_sha256": "06665358efd8ba05be236a47a12cb0958d7d75dd939d77c2b31f5398537ebdc5"
+    }
+  ]
+}

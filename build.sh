@@ -7,7 +7,7 @@ set -euo pipefail
 project_root="$(cd "$(dirname "$0")" && pwd)"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$project_root/runtime-cache}"
 mirror="auto"          # auto | cn | global
-with_gpl=0
+with_gpl=1
 download_only=0
 check_only=0
 gh_mirror="${GH_MIRROR:-https://gh-proxy.com/}"
@@ -24,10 +24,12 @@ Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
                            Tencent Android SDK mirror. Default: auto (probe).
-  --with-gpl               Also fetch the GPL-3.0 parts (microG signature
-                           module, Magisk host_patch.sh) from upstream and do a
-                           full AOSP + Magisk + microG build. Without it, a
-                           pure AOSP build is installed.
+  --pure                   Install the pure AOSP edition only: no Magisk, no microG,
+                           no GPL-3.0 parts.
+  (default)                Full edition: AOSP + Magisk + microG, which also fetches
+                           the GPL-3.0 parts (microG signature module, Magisk
+                           host_patch.sh) from upstream. --with-gpl is accepted
+                           as an alias.
   --download-only          Only fill ./runtime-cache, do not install.
   --check                  Only check prerequisites.
   -h, --help               Show this help.
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --mirror) mirror="${2:-}"; shift 2 ;;
     --mirror=*) mirror="${1#*=}"; shift ;;
     --with-gpl) with_gpl=1; shift ;;
+    --pure) with_gpl=0; shift ;;
     --download-only) download_only=1; shift ;;
     --check) check_only=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -143,11 +146,11 @@ fetch_gpl() {
   ──────────────────────────────────────────────────────────────────────
   GPL-3.0 NOTICE / 许可证提示
   The following components are licensed under GPL-3.0, NOT Apache-2.0,
-  and are downloaded from upstream only because you passed --with-gpl:
+  and are downloaded from upstream because you are building the full edition (use --pure to skip):
     · microg-spoof/  (MicroG Signature Compatibility, derived from FakeGApps)
     · third_party/Magisk/host_patch.sh  (topjohnwu/Magisk v30.7)
   They stay under their own license. Do not redistribute them as Apache-2.0.
-  以上组件为 GPL-3.0，仅因你使用了 --with-gpl 才从上游下载，保持其原许可证。
+  以上组件为 GPL-3.0，因构建完整版而从上游下载（--pure 可跳过），保持其原许可证。
   ──────────────────────────────────────────────────────────────────────
 
 NOTICE

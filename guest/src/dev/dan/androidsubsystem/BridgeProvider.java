@@ -39,28 +39,37 @@ public final class BridgeProvider extends ContentProvider {
                     if (!seen.add(pkg)) continue;
                     JSONObject app = new JSONObject();
                     app.put("package", pkg); app.put("label", info.loadLabel(pm).toString());
-                    try {
-                        Drawable icon = info.loadIcon(pm);
-                        Bitmap bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
-                        Canvas canvas = new Canvas(bitmap); icon.setBounds(0, 0, 64, 64); icon.draw(canvas);
-                        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
-                        app.put("icon", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP));
-                        bitmap.recycle();
-                    } catch (RuntimeException e) { app.put("icon", ""); }
+                    try { app.put("icon", png(info.loadIcon(pm), 64, 0)); }
+                    catch (RuntimeException e) { app.put("icon", ""); }
                     apps.put(app);
                 }
                 result.put("apps", apps);
+            } else if ("icon".equals(endpoint)) {
+                // Full-size icon for a Mac app bundle; the margin follows the macOS icon grid.
+                String pkg = uri.getQueryParameter("package");
+                if (pkg == null || !pkg.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")) throw new IllegalArgumentException("Invalid package");
+                PackageManager pm = getContext().getPackageManager();
+                Intent launch = pm.getLaunchIntentForPackage(pkg);
+                result.put("icon", png(launch != null ? pm.getActivityIcon(launch) : pm.getApplicationIcon(pkg), 512, 48));
             } else if ("notifications".equals(endpoint)) {
                 result.put("notifications", new JSONArray(getContext().getSharedPreferences("bridge", 0).getString("events", "[]")));
             } else if ("status".equals(endpoint)) {
                 NotificationManager manager = getContext().getSystemService(NotificationManager.class);
                 result.put("notification_access", manager.isNotificationListenerAccessGranted(new ComponentName(getContext(), BridgeNotifications.class)));
             } else { throw new IllegalArgumentException("Unknown endpoint"); }
-        } catch (org.json.JSONException e) { throw new IllegalStateException(e); }
+        } catch (org.json.JSONException e) { throw new IllegalStateException(e);
+        } catch (PackageManager.NameNotFoundException e) { throw new IllegalArgumentException("Unknown package"); }
         MatrixCursor cursor = new MatrixCursor(new String[]{"payload"});
         cursor.addRow(new Object[]{Base64.encodeToString(result.toString().getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP)});
         return cursor;
+    }
+    private static String png(Drawable icon, int size, int margin) {
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        icon.setBounds(margin, margin, size - margin, size - margin); icon.draw(new Canvas(bitmap));
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
+        bitmap.recycle();
+        return Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP);
     }
     @Override public String getType(Uri uri) { return "application/json"; }
     @Override public android.os.Bundle call(String method, String arg, android.os.Bundle extras) {
