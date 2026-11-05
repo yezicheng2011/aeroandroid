@@ -46,6 +46,8 @@ def good_probe():
 
 
 class FakeController:
+    api = 36
+    arch = 'arm64'
     image_tag = 'default'
     config = {'android': 16}
 

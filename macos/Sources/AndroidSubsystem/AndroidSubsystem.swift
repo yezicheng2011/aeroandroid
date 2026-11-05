@@ -31,9 +31,7 @@ final class Backend {
         // JSON is passed as a process argument, never interpolated into a shell command.
         let request = try JSONSerialization.data(withJSONObject: params)
         let encoded = String(decoding: request, as: UTF8.self)
-        guard let resources = Bundle.main.resourceURL else {
-            throw BridgeFailure(message: L10n.t("err.missing_resources"))
-        }
+        let resources = AppBundle.manager.appendingPathComponent("Contents/Resources")
         let script = resources.appendingPathComponent("backend/subsystem.py")
         guard FileManager.default.fileExists(atPath: script.path) else {
             throw BridgeFailure(message: L10n.t("err.missing_controller"))
@@ -93,7 +91,7 @@ final class SubsystemModel: ObservableObject {
     @Published var apps: [AndroidApp] = []
     @Published var windows: Set<String> = []
     @Published var state = "unavailable"
-    @Published var android = 16
+    @Published var android = 17
     @Published var busy = false
     @Published var progress = ""
     @Published var error: String?
@@ -172,7 +170,7 @@ final class SubsystemModel: ObservableObject {
     func applyStatus(_ response: [String: Any]) {
         let old = state
         state = response["state"] as? String ?? "unavailable"
-        android = response["android"] as? Int ?? 16
+        android = response["android"] as? Int ?? 17
         config = response["config"] as? [String: Any] ?? [:]
         logsPath = response["logs"] as? String ?? ""
         windows = Set((response["windows"] as? [String: Any] ?? [:]).keys).union(surfaceWindows.keys)
@@ -311,10 +309,10 @@ final class SubsystemModel: ObservableObject {
             self.checks = result["checks"] as? [[String: Any]] ?? []
         }
     }
-    func saveConfiguration(android: Int, memory: Int, cores: Int, fps: Int) {
+    func saveConfiguration(android: Int, memory: Int, cores: Int, fps: Int, gpu: String) {
         operation(L10n.t("prog.save_config")) {
             _ = try await self.backend.call("configure", ["android": android, "memory_mb": memory,
-                                                        "cores": cores, "fps": fps])
+                                                        "cores": cores, "fps": fps, "gpu": gpu])
         }
     }
     func showLogs() {
@@ -457,10 +455,11 @@ struct FilesView: View {
 
 struct RuntimeView: View {
     @EnvironmentObject var model: SubsystemModel
-    @CompatibleState<Int> private var android = 16
+    @CompatibleState<Int> private var android = 17
     @CompatibleState<Int> private var memory = 4096
     @CompatibleState<Int> private var cores = 4
     @CompatibleState<Int> private var fps = 30
+    @CompatibleState<String> private var gpu = "auto"
     var body: some View {
         Form {
             Section(model.t("settings.language")) {
@@ -487,13 +486,19 @@ struct RuntimeView: View {
                 }
                 Stepper(model.t("settings.cores", cores), value: $cores, in: 2...12)
                 Picker(model.t("settings.fps"), selection: $fps) {
-                    ForEach([15, 30], id: \.self) { Text("\($0) FPS").tag($0) }
+                    ForEach([15, 30, 60], id: \.self) { Text("\($0) FPS").tag($0) }
                 }
-                Button(model.t("settings.save")) { model.saveConfiguration(android: android, memory: memory, cores: cores, fps: fps) }
+                Picker(model.t("settings.gpu"), selection: $gpu) {
+                    Text(model.t("settings.gpu.auto")).tag("auto")
+                    Text(model.t("settings.gpu.host")).tag("host")
+                }
+                Text(model.t("settings.gpu_hint")).font(.caption).foregroundStyle(.secondary)
+                Button(model.t("settings.save")) { model.saveConfiguration(android: android, memory: memory, cores: cores, fps: fps, gpu: gpu) }
                     .disabled(model.busy || model.state == "running" || model.state == "booting")
                 Text(model.t("settings.config_hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            GamepadSettings()
             Section(model.t("settings.notifications")) {
                 Toggle(model.t("settings.forward_notify"), isOn: Binding(get: { model.notificationsEnabled }, set: { model.setNotifications($0) }))
                 Button(model.t("settings.open_notify")) {
@@ -520,7 +525,8 @@ struct RuntimeView: View {
             android = model.android
             memory = model.config["memory_mb"] as? Int ?? 4096
             cores = model.config["cores"] as? Int ?? 4
-            fps = min(30, model.config["fps"] as? Int ?? 30)
+            fps = min(60, model.config["fps"] as? Int ?? 30)
+            gpu = model.config["gpu"] as? String ?? "auto"
         }
     }
 }
@@ -626,7 +632,6 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-@main
 struct AndroidSubsystemApp: App {
     @StateObject private var model = SubsystemModel()
     private let notificationDelegate = NotificationDelegate()
@@ -635,6 +640,8 @@ struct AndroidSubsystemApp: App {
             MainView().environmentObject(model).onAppear {
                 notificationDelegate.launch = { package in model.launchPackage(package) }
                 UNUserNotificationCenter.current().delegate = notificationDelegate
+                ApkHandler.registerOnce()
+                IntelNotice.showOnce()
             }
         }
         .commands {

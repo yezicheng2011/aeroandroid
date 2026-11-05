@@ -33,17 +33,28 @@ default_cache="$project_root/runtime-cache"
 [[ -d "$default_cache" ]] || default_cache="$project_root/../runtime-cache"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$default_cache}"
 echo "离线依赖：$cache"
-[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo '需要在 M5 或其他 Apple Silicon Mac 上运行。'; exit 1; }
+[[ "$(uname -s)" == Darwin ]] || { echo '需要在 Mac 上运行 / Requires a Mac.'; exit 1; }
+source "$project_root/scripts/host.sh"
+# build.sh exports the lock for the chosen Android version; run directly, default to Android 17.
+export ANDROID_SUBSYSTEM_LOCK="${ANDROID_SUBSYSTEM_LOCK:-$(lock_for 17)}"
+echo "Mac 架构 / architecture：$HOST_ARCH；锁定文件 / lock：$(basename "$ANDROID_SUBSYSTEM_LOCK")"
 if ! xcrun --find swift >/dev/null 2>&1; then
   echo '需要 Xcode Command Line Tools。请先安装，再重新打开此文件。'
   echo '安装命令：xcode-select --install'
   exit 1
 fi
-python_archive="$cache/mac-tools/cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz"
+# The pinned Python for this Mac's architecture comes from the lock file.
+read -r python_relative python_sha256 < <(/usr/bin/python3 - "$ANDROID_SUBSYSTEM_LOCK" <<'PY'
+import json, sys
+entry = next(a for a in json.load(open(sys.argv[1]))['archives'] if a.get('kind') == 'python')
+print(entry['relative_path'], entry['sha256'])
+PY
+)
+python_archive="$cache/$python_relative"
 [[ -f "$python_archive" ]] || { echo "缺少离线缓存：$python_archive"; exit 1; }
 echo '正在校验 Python 引导程序…'
 actual="$(shasum -a 256 "$python_archive" | awk '{print $1}')"
-[[ "$actual" == '83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8' ]] || { echo 'Python 文件校验失败。'; exit 1; }
+[[ "$actual" == "$python_sha256" ]] || { echo 'Python 文件校验失败。'; exit 1; }
 if [[ -f "$root/config.json" ]]; then
   echo '先退出管理应用，并使用旧版本后端停止现有子系统…'
   "$root/runtime/python/bin/python3" -u "$project_root/scripts/prepare-runtime-migration.py" --root "$root"

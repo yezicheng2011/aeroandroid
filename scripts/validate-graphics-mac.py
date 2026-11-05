@@ -13,8 +13,8 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
-        raise RuntimeError('请在 Apple Silicon Mac 上运行图形验收。')
+    if platform.system() != 'Darwin':
+        raise RuntimeError('请在 Mac 上运行图形验收。 / Run the graphics acceptance on a Mac.')
     root = Path(os.environ.get('ANDROID_SUBSYSTEM_HOME', Path.home() / 'Library/Application Support/AndroidSubsystem'))
     app = Path.home() / 'Applications/Android Subsystem.app'
     if not app.exists(): raise RuntimeError('请先运行 Graphics-Install.command。')

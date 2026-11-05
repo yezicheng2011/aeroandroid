@@ -1,6 +1,6 @@
 name: Desktop release
 # Builds the lightweight macOS DMG (manager app + installer + source) and publishes a GitHub Release.
-# Apple Silicon only. Free signing only: ad-hoc codesign (no Apple Developer ID).
+# Universal binary (Apple Silicon + Intel). Free signing only: ad-hoc codesign (no Apple Developer ID).
 # The Android Emulator / SDK / system image are NOT bundled (Android SDK License §3.4 forbids
 # redistribution); the installer downloads them from Google at install time, SHA-256 pinned.
 on:
@@ -53,20 +53,23 @@ jobs:
       - name: Build guest APK and Mac app
         run: |
           /bin/bash scripts/build-guest.sh
-          /bin/bash scripts/build-mac.sh
-      - name: Check architecture (arm64)
+          AEROANDROID_UNIVERSAL=1 /bin/bash scripts/build-mac.sh
+      - name: Check architecture (arm64 and x86_64)
         run: |
           app="dist/Android Subsystem.app"
-          lipo -info "$app/Contents/MacOS/AndroidSubsystem" "$app/Contents/Resources/AndroidEntry"
-          for f in "$app/Contents/MacOS/AndroidSubsystem" "$app/Contents/Resources/AndroidEntry"; do
-            lipo -archs "$f" | grep -qw arm64 || { echo "::error::not arm64: $f"; exit 1; }
+          helper="$app/Contents/Helpers/APK Installer.app/Contents/MacOS/AndroidSubsystem"
+          lipo -info "$app/Contents/MacOS/AndroidSubsystem" "$helper"
+          for f in "$app/Contents/MacOS/AndroidSubsystem" "$helper"; do
+            for arch in arm64 x86_64; do
+              lipo -archs "$f" | grep -qw "$arch" || { echo "::error::missing $arch slice: $f"; exit 1; }
+            done
           done
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist"
       - name: Ad-hoc sign (free; avoids the "damaged" error on Apple silicon)
         run: |
           app="dist/Android Subsystem.app"
           xattr -cr "$app"
-          codesign --force --timestamp=none --sign - "$app/Contents/Resources/AndroidEntry"
+          codesign --force --timestamp=none --sign - "$app/Contents/Helpers/APK Installer.app"
           codesign --force --deep --timestamp=none --sign - "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/cs.txt
@@ -88,15 +91,21 @@ jobs:
           v="${{ steps.v.outputs.version }}"
           mkdir -p dmgroot/aeroandroid-source out
           git archive HEAD | tar -x -C dmgroot/aeroandroid-source
-          rm -rf dmgroot/aeroandroid-source/.github dmgroot/aeroandroid-source/packaging
+          rm -rf dmgroot/aeroandroid-source/.github dmgroot/aeroandroid-source/packaging dmgroot/aeroandroid-source/docs/original
+          # Not needed to build or install: unit tests and the full-size logo (the app carries AppIcon.icns).
+          rm -f dmgroot/aeroandroid-source/tests/test_*.py dmgroot/aeroandroid-source/tests/fake_runtime.py dmgroot/aeroandroid-source/assets/logo-1024.png
           ditto "dist/Android Subsystem.app" "dmgroot/Android Subsystem.app"
           cp "packaging/dmg/安装 aeroandroid.command" "packaging/dmg/首次安装说明 README-FIRST.txt" LICENSE NOTICE dmgroot/
           chmod +x "dmgroot/安装 aeroandroid.command"
           # No GPL parts: microg-spoof/ and third_party/Magisk/ are not in git.
           test ! -e dmgroot/aeroandroid-source/microg-spoof && test ! -e dmgroot/aeroandroid-source/third_party/Magisk
           xattr -cr dmgroot
-          hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "out/aeroandroid-$v-macOS-arm64.dmg"
-          mnt="$(hdiutil attach -nobrowse -readonly "out/aeroandroid-$v-macOS-arm64.dmg" | awk -F'\t' '/\/Volumes\// {print $NF}' | tail -1)"
+          hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format ULMO -ov "out/aeroandroid-$v-macOS-universal.dmg"
+          # Ad-hoc sign the disk image too (free, no Apple Developer account).
+          codesign --force --timestamp=none --sign - "out/aeroandroid-$v-macOS-universal.dmg"
+          codesign --verify --verbose=2 "out/aeroandroid-$v-macOS-universal.dmg"
+          ls -l out/ | awk '{print "DMG size:", $5, "bytes", $9}'
+          mnt="$(hdiutil attach -nobrowse -readonly "out/aeroandroid-$v-macOS-universal.dmg" | awk -F'\t' '/\/Volumes\// {print $NF}' | tail -1)"
           echo "mounted at $mnt"; ls -la "$mnt"
           codesign --verify --deep --strict "$mnt/Android Subsystem.app"
           lipo -info "$mnt/Android Subsystem.app/Contents/MacOS/AndroidSubsystem"

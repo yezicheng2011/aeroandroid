@@ -25,12 +25,23 @@ import uuid
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\Z")
 COMPANION = "dev.dan.androidsubsystem"
 AUTHORITY = COMPANION + ".bridge"
-DEFAULTS = {"android": 16, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
-            "resolution": "1280x960/200", "fps": 30, "bitrate": "12M"}
+DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
+            "resolution": "1280x960/200", "fps": 30, "bitrate": "12M", "gpu": "auto"}
 
 
 class SubsystemError(Exception):
     pass
+
+
+def host_arch():
+    """'arm64' on Apple Silicon (also in a Rosetta shell), 'x86_64' on an Intel Mac."""
+    if platform.machine() == "arm64":
+        return "arm64"
+    try:
+        out = subprocess.run(["/usr/sbin/sysctl", "-in", "hw.optional.arm64"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    return "arm64" if out.strip() == "1" else "x86_64"
 
 
 def atomic_json(path: Path, value):
@@ -59,6 +70,17 @@ def package_name(value):
     return value
 
 
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def icns_from_png(png):
+    """Wrap one 512x512 PNG as a macOS .icns (type ic09); Finder and the Dock scale it."""
+    if not png.startswith(PNG_MAGIC) or len(png) < 33 or int.from_bytes(png[16:24], "big") != (512 << 32 | 512):
+        raise SubsystemError("The app icon must be a 512x512 PNG")
+    entry = b"ic09" + (len(png) + 8).to_bytes(4, "big") + png
+    return b"icns" + (len(entry) + 8).to_bytes(4, "big") + entry
+
+
 def shared_path(value):
     """Restrict guest file operations to the designated exchange directory."""
     if not isinstance(value, str) or not value.startswith("/sdcard/Download/MacBridge/"):
@@ -78,6 +100,10 @@ class Controller:
         self.logs = self.root / "logs"
         self.logs.mkdir(exist_ok=True)
         self.runner = runner or subprocess.run
+        self.arch = host_arch()   # which system image and emulator build this Mac runs
+        # Quick Boot snapshots are for everyday use only. Provisioning builds a Controller
+        # directly and always cold boots, because Magisk modules apply at boot.
+        self.quick_boot = False
         self.children = {}
         saved = read_json(self.root / "config.json", {})
         self.config = self.loaded_config(saved)
@@ -112,12 +138,19 @@ class Controller:
         w, h, dpi = map(int, re.split(r"[x/]", c["resolution"]))
         if not (320 <= w <= 3840 and 320 <= h <= 3840 and 100 <= dpi <= 640):
             raise SubsystemError("Resolution or DPI outside supported range")
+        if c.get("gpu") not in ("auto", "host"):
+            raise SubsystemError("GPU mode must be auto or host")
         if not re.fullmatch(r"[1-9][0-9]?M", str(c.get("bitrate"))):
             raise SubsystemError("Invalid video bitrate")
 
     @property
     def api(self):
         return self.config["android"] + 20
+
+    @property
+    def image_api(self):
+        """SDK folder name of the system image; Android 17 is published as android-37.0."""
+        return "37.0" if self.api == 37 else str(self.api)
 
     def loaded_config(self, saved):
         config = {**DEFAULTS, **saved}
@@ -137,10 +170,15 @@ class Controller:
         return base / "default" if self.image_tag == "default" else base
 
     @property
+    def abi(self):
+        return "arm64-v8a" if self.arch == "arm64" else "x86_64"
+
+    @property
     def avd(self):
+        tag = "arm64" if self.arch == "arm64" else "x86_64"
         if self.image_tag == "default":
-            return f"MacAndroid_{self.config['android']}_AOSP_arm64"
-        return f"MacAndroid_{self.config['android']}_arm64"
+            return f"MacAndroid_{self.config['android']}_AOSP_{tag}"
+        return f"MacAndroid_{self.config['android']}_{tag}"
 
     @property
     def serial(self):
@@ -253,17 +291,23 @@ class Controller:
 
     def diagnostic(self):
         checks = []
-        checks.append({"name": "Apple Silicon Mac", "ok": platform.system() == "Darwin" and
-                      platform.machine() == "arm64", "detail": platform.platform()})
+        checks.append({"name": "Mac (Apple Silicon or Intel)", "ok": platform.system() == "Darwin",
+                      "detail": f"{platform.platform()} · {self.arch}"})
         for name in ("adb", "emulator", "scrcpy", "sdkmanager", "avdmanager"):
             try:
                 p = self.tool(name)
                 checks.append({"name": name, "ok": True, "detail": p})
             except SubsystemError as e:
                 checks.append({"name": name, "ok": False, "detail": str(e)})
-        image = self.sdk / f"system-images/android-{self.api}/{self.image_tag}/arm64-v8a/system.img"
-        checks.append({"name": f"Android {self.config['android']} ARM64 image", "ok": image.exists(),
+        image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
+        checks.append({"name": f"Android {self.config['android']} {self.abi} image", "ok": image.exists(),
                       "detail": str(image)})
+        try:
+            if self.device():   # which app CPU types Android runs: an Intel Mac needs ARM translation for arm64-only apps
+                abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip()
+                checks.append({"name": "Android CPU types (apps)", "ok": bool(abis), "detail": abis or "unknown"})
+        except SubsystemError:
+            pass
         try:
             result = self.run([self.tool("emulator"), "-accel-check"], check=False)
             checks.append({"name": "Hardware acceleration", "ok": result.returncode == 0,
@@ -301,11 +345,11 @@ class Controller:
                 raise SubsystemError("Legacy Google image is retained only for migration; select the AOSP runtime")
             if self.configured():
                 return {"avd": self.avd, "created": False}
-            image = self.sdk / f"system-images/android-{self.api}/{self.image_tag}/arm64-v8a/system.img"
+            image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
             if not image.is_file():
                 raise SubsystemError(f"Android {self.config['android']} image missing. Run setup-mac.sh {self.config['android']}")
             self.run([self.tool("avdmanager"), "--verbose", "create", "avd", "--name", self.avd,
-                      "--package", f"system-images;android-{self.api};{self.image_tag};arm64-v8a",
+                      "--package", f"system-images;android-{self.image_api};{self.image_tag};{self.abi}",
                       "--path", str(self.avd_home / f"{self.avd}.avd")], timeout=90, input="no\n")
             config_file = self.avd_home / f"{self.avd}.avd/config.ini"
             settings = dict(line.split("=", 1) for line in config_file.read_text().splitlines()
@@ -316,6 +360,14 @@ class Controller:
                              "hw.lcd.density": "200", "hw.audioInput": "no", "hw.audioOutput": "yes"})
             config_file.write_text("\n".join(f"{k}={v}" for k, v in settings.items()) + "\n")
             return {"avd": self.avd, "created": True}
+
+    def webcam_flags(self):
+        """Show the Mac's camera to Android's camera app when one is connected."""
+        try:
+            listing = self.run([self.tool("emulator"), "-webcam", "list"], timeout=20, check=False).stdout
+        except SubsystemError:
+            return []
+        return ["-camera-back", "webcam0", "-camera-front", "webcam0"] if "webcam0" in listing else []
 
     def process_matches(self, record):
         pid = record.get("pid", 0)
@@ -345,17 +397,19 @@ class Controller:
         return bool(record) and self.process_matches(record)
 
     def boot(self):
-        if platform.system() != "Darwin" or platform.machine() != "arm64":
-            raise SubsystemError("This runtime requires an Apple Silicon Mac (M1–M5)")
+        if platform.system() != "Darwin":
+            raise SubsystemError("This runtime requires a Mac")
         self.create()
         with self.locked():
             active = self.device()
             if not active and not self.running_emulator():
                 self.select_start_port()
                 argv = [self.tool("emulator"), "-avd", self.avd, "-port", str(self.config["port"]),
-                        "-no-window", "-no-boot-anim", "-gpu", "auto", "-accel", "on",
+                        "-no-window", "-no-boot-anim", "-gpu", self.config["gpu"], "-accel", "on",
                         "-memory", str(self.config["memory_mb"]), "-cores", str(self.config["cores"]),
-                        "-no-snapshot", "-no-metrics"]
+                        "-no-metrics", *self.webcam_flags()]
+                if not self.quick_boot:
+                    argv.append("-no-snapshot")
                 if self.config.get("magisk_ramdisk"):
                     ramdisk = Path(self.config["magisk_ramdisk"]).resolve()
                     expected_dir = self.magisk_image_dir.resolve()
@@ -421,7 +475,7 @@ class Controller:
                 self.adb("emu", "kill", check=False)
             else:
                 self.terminate(read_json(self.root / "emulator.json", {}))
-            deadline = time.monotonic() + 15
+            deadline = time.monotonic() + (90 if self.quick_boot else 15)   # Quick Boot saves RAM on exit
             while time.monotonic() < deadline:
                 if not self.running_emulator() and not self.device() and not self.unconfirmed_shutdown():
                     break
@@ -434,6 +488,17 @@ class Controller:
                     child.wait()
                     self.children.pop(pid, None)
             return {"state": "stopped"}
+
+    def prime(self):
+        """Boot once with Quick Boot, then stop, so the first app launch restores a snapshot
+        (seconds) instead of cold booting (minutes). Run at the end of every install."""
+        self.stop()
+        shutil.rmtree(self.avd_home / f"{self.avd}.avd/snapshots", ignore_errors=True)   # never restore a stale one
+        (self.root / "quick-boot").touch()
+        self.quick_boot = True
+        self.boot()
+        self.stop()
+        return {"quick_boot": True}
 
     def native_session(self, package):
         package_name(package)
@@ -492,7 +557,7 @@ class Controller:
             w, h, dpi = map(int, re.split(r"[x/]", self.config["resolution"]))
             return {"port": record["port"], "token": token_path.read_text(), "version": 1,
                     "package": package, "width": min(w, 2560), "height": min(h, 2560), "dpi": dpi,
-                    "fps": min(self.config["fps"], 30), "transport": "rgba-tcp-v1"}
+                    "fps": min(self.config["fps"], 60), "transport": "rgba-tcp-v1"}
 
     def terminate(self, record):
         if self.process_matches(record):
@@ -573,6 +638,10 @@ class Controller:
         with self.locked():
             args = ["install", "-r", str(paths[0])] if len(paths) == 1 else ["install-multiple", "-r", *map(str, paths)]
             result = self.adb(*args, timeout=240)
+            if "NO_MATCHING_ABIS" in result.stdout:
+                abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip() or self.abi
+                raise SubsystemError(f"This app's native code does not match the CPU types of this Android system ({abis}). "
+                                     "On an Intel Mac, apps built only for arm64 (many games) cannot run.")
             if "Success" not in result.stdout:
                 raise SubsystemError(result.stdout or "APK installation failed")
             return {"installed": [p.name for p in paths]}
@@ -634,6 +703,31 @@ class Controller:
         except (ValueError, UnicodeError) as e:
             raise SubsystemError("Invalid companion response") from e
 
+    def app_icon(self, package):
+        """512x512 PNG of an installed app's launcher icon, rendered by the guest bridge."""
+        package_name(package)
+        result = self.adb("shell", "content", "query", "--uri", f"content://{AUTHORITY}/icon?package={package}")
+        match = re.search(r"payload=([A-Za-z0-9+/=]+)", result.stdout)
+        if not match:
+            raise SubsystemError("Mac Bridge companion unavailable")
+        try:
+            return base64.b64decode(json.loads(base64.b64decode(match[1], validate=True))["icon"], validate=True)
+        except (ValueError, KeyError, TypeError) as e:
+            raise SubsystemError("Invalid companion response") from e
+
+    def apk_info(self, files):
+        """Package name and label of an APK (the first split that is launchable), via aapt2."""
+        tools = sorted(self.sdk.glob("build-tools/*/aapt2"))
+        if not tools:
+            raise SubsystemError("Missing aapt2. Run scripts/setup-mac.sh first.")
+        for path in files:
+            out = self.run([str(tools[-1]), "dump", "badging", str(path)], timeout=60, check=False).stdout
+            package = re.search(r"^package: name='([^']+)'", out, re.MULTILINE)
+            if package and "launchable-activity:" in out and PACKAGE.fullmatch(package[1]):
+                labels = dict(re.findall(r"^application-label(?:-([A-Za-z-]+))?:'(.*)'$", out, re.MULTILINE))
+                return {"package": package[1], "label": labels.get("") or package[1]}
+        raise SubsystemError("This APK has no launchable app")
+
     def notifications(self):
         self.ready()
         data = self.bridge("notifications")
@@ -644,30 +738,49 @@ class Controller:
         # Permission is granted through Android's own settings UI.
         return self.launch(COMPANION, "Mac Bridge · 通知设置")
 
-    def export_launcher(self, package, label, app_path, destination):
+    def export_launcher(self, package, label, app_path, destination, replace=False):
+        """A real Mac app for one Android app: own Dock icon, opens only that app's window."""
         package_name(package)
         app = Path(app_path).resolve()
-        helper = app / "Contents/Resources/AndroidEntry"
-        if not helper.is_file():
+        binary = app / "Contents/MacOS/AndroidSubsystem"
+        if not binary.is_file():
             raise SubsystemError("Build the Mac app before exporting launchers")
         folder = Path(destination).expanduser().resolve()
         folder.mkdir(parents=True, exist_ok=True)
         safe = re.sub(r"[^\w .-]", "_", label, flags=re.UNICODE).strip(" .")[:60] or package
-        target = folder / f"{safe} ({package}).app"
+        target = folder / f"{safe}.app"
         if target.exists():
-            raise SubsystemError("This launcher already exists")
+            existing = {}
+            with contextlib.suppress(OSError, ValueError, plistlib.InvalidFileException):
+                existing = plistlib.loads((target / "Contents/Info.plist").read_bytes())
+            if not replace or existing.get("AndroidPackage") != package:
+                raise SubsystemError("This launcher already exists")
+            shutil.rmtree(target)
+        icon = icns_from_png(self.app_icon(package))
         contents = target / "Contents"
         (contents / "MacOS").mkdir(parents=True)
-        shutil.copy2(helper, contents / "MacOS/AndroidEntry")
-        info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.entry." + package,
-                "CFBundleName": label, "CFBundleDisplayName": label,
-                "CFBundleExecutable": "AndroidEntry", "CFBundlePackageType": "APPL",
-                "CFBundleVersion": "1", "LSMinimumSystemVersion": "14.0",
-                "LSUIElement": True, "AndroidPackage": package, "SubsystemAppPath": str(app)}
+        (contents / "Resources").mkdir()
+        shutil.copy2(binary, contents / "MacOS/AndroidSubsystem")
+        (contents / "Resources/AppIcon.icns").write_bytes(icon)
+        info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.app." + package,
+                "CFBundleName": label, "CFBundleDisplayName": label, "CFBundleIconFile": "AppIcon",
+                "CFBundleExecutable": "AndroidSubsystem", "CFBundlePackageType": "APPL",
+                "CFBundleVersion": "1", "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
+                "NSCameraUsageDescription": "This Android app can use the Mac camera.",
+                "AndroidPackage": package, "SubsystemAppPath": str(app)}
         with (contents / "Info.plist").open("wb") as f:
             plistlib.dump(info, f)
         self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(target)])
+        self.run(["/usr/bin/touch", str(target)], check=False)   # make Finder and the Dock reread the icon
         return {"launcher": str(target)}
+
+    def install_app(self, files, app_path, destination):
+        """Install APK(s) and leave a ready-to-open Mac app for them in `destination`."""
+        paths = [Path(p).expanduser().resolve() for p in files] if isinstance(files, list) else []
+        info = self.apk_info(paths) if paths else None
+        installed = self.install(files)
+        launcher = self.export_launcher(info["package"], info["label"], app_path, destination, replace=True)
+        return {**installed, **info, **launcher}
 
 
 def dispatch(controller, action, params):
@@ -680,7 +793,9 @@ def dispatch(controller, action, params):
              "uninstall": lambda: controller.uninstall(params["package"]), "push": lambda: controller.push(params["files"]),
              "files": lambda: controller.files(), "pull": lambda: controller.pull(params["remote"], params["destination"]),
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
-             "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"])}
+             "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
+             "prime": lambda: controller.prime(),
+             "install-app": lambda: controller.install_app(params["files"], params["app_path"], params["destination"])}
     if action not in table:
         raise SubsystemError("Unknown action")
     return table[action]()
@@ -696,7 +811,9 @@ def main():
         params = json.loads(args.params)
         if not isinstance(params, dict):
             raise SubsystemError("Parameters must be a JSON object")
-        result = dispatch(Controller(args.root), args.action, params)
+        controller = Controller(args.root)
+        controller.quick_boot = (controller.root / "quick-boot").is_file()
+        result = dispatch(controller, args.action, params)
         print(json.dumps({"ok": True, "data": result}, ensure_ascii=False))
     except (SubsystemError, ValueError, KeyError, TypeError, OSError) as e:
         print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))

@@ -20,6 +20,12 @@ PROJECT = Path(__file__).resolve().parents[1]
 COMMON_NAMESPACE = 'http://schemas.android.com/repository/android/common/02'
 
 
+def package_destination(sdk, package):
+    """Where an SDK package lives: platforms;android-36 -> platforms/android-36, and so on."""
+    fixed = {'cmdline-tools;latest': 'cmdline-tools/latest', 'platform-tools': 'platform-tools', 'emulator': 'emulator'}
+    return sdk / fixed.get(package, package.replace(';', '/'))
+
+
 def package_records(cache, lock):
     """Select the exact repository revision whose archive bytes are locked.
 
@@ -190,14 +196,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
             raise RuntimeError('SDK license was not accepted; installation cancelled')
     (sdk / 'licenses').mkdir(parents=True, exist_ok=True)
     if not previously_accepted: accepted.write_text(license_digest + '\n')
-    destinations = {
-        'platforms;android-36': sdk / 'platforms/android-36',
-        'build-tools;36.0.0': sdk / 'build-tools/36.0.0',
-        'cmdline-tools;latest': sdk / 'cmdline-tools/latest',
-        'platform-tools': sdk / 'platform-tools',
-        'emulator': sdk / 'emulator',
-        'system-images;android-36;default;arm64-v8a': sdk / 'system-images/android-36/default/arm64-v8a'
-    }
+    destinations = {e['package']: package_destination(sdk, e['package']) for e in lock['archives'] if e.get('package')}
     marker = root / 'installed-runtime.json'
     fingerprint = runtime_fingerprint(lock)
     already = runtime_installed(root, lock)
@@ -232,7 +231,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
     if config.get('image_tag') != 'default':
         config.pop('magisk_ramdisk', None)
-    config.update({'android': 16, 'image_tag': 'default', 'sdk': str(sdk), 'java_home': str(java_home)})
+    config.update({'android': lock['android'], 'image_tag': 'default', 'sdk': str(sdk), 'java_home': str(java_home)})
     config_path.write_text(json.dumps(config, indent=2))
     config_path.chmod(0o600)
     env = {**os.environ, 'JAVA_HOME': str(java_home), 'ANDROID_SUBSYSTEM_SDK': str(sdk),
@@ -245,7 +244,11 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         if not graphics_only:
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-mac.py'), str(cache)], env=env, check=True)
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-microg.py'), str(cache)], env=env, check=True)
+            subprocess.run([sys.executable, str(PROJECT / 'scripts/preinstall-apps.py'), str(cache)], env=env, check=True)
             retire_legacy_google_image(root)
+        # Save a Quick Boot snapshot now so the first app you open starts in seconds. Only a speed-up.
+        primed = subprocess.run([sys.executable, str(PROJECT / 'backend/subsystem.py'), 'prime'], env=env)
+        if primed.returncode: print('快速启动快照未保存，首次打开会较慢 / Quick Boot snapshot not saved; first launch will be slower.')
         app_folder = Path.home() / 'Applications'
         app_folder.mkdir(exist_ok=True)
         built = PROJECT / 'dist/Android Subsystem.app'
@@ -267,8 +270,8 @@ def main():
     parser.add_argument('--accept-sdk-license', action='store_true')
     parser.add_argument('--graphics-only', action='store_true', help='Install for graphics acceptance before Magisk root provisioning')
     args = parser.parse_args()
-    if platform.system() != 'Darwin' or platform.machine() != 'arm64': raise RuntimeError('Requires an Apple Silicon Mac')
-    lock = json.loads((PROJECT / 'scripts/runtime-lock.json').read_text())
+    if platform.system() != 'Darwin': raise RuntimeError('Requires a Mac')
+    lock = json.loads(Path(os.environ.get('ANDROID_SUBSYSTEM_LOCK') or PROJECT / 'scripts/runtime-lock.json').read_text())
     # A retry with existing dependencies needs space for compilation, not another
     # full SDK extraction. Full provisioning also needs room for Guest userdata.
     required_gb = (2 if args.graphics_only else 12) if runtime_installed(args.root, lock) else 20

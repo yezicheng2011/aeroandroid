@@ -98,8 +98,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', type=Path, default=DEFAULT_ROOT)
     args = parser.parse_args()
-    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
-        raise RuntimeError('Run this migration on your Apple Silicon Mac')
+    if platform.system() != 'Darwin':
+        raise RuntimeError('Run this migration on your Mac')
     prepare(args.root)
 
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # aeroandroid self-build: one command to check prerequisites, download the
 # pinned runtime (SHA-256 verified) into ./runtime-cache and run the installer.
-# Copyright 2026 daniel.yeå¶å­è¯ — Apache-2.0
+# Copyright 2026 daniel.ye叶子诚 — Apache-2.0
 set -euo pipefail
 
 project_root="$(cd "$(dirname "$0")" && pwd)"
+source "$project_root/scripts/host.sh"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$project_root/runtime-cache}"
 mirror="auto"          # auto | cn | global
-with_gpl=0
+with_gpl=1
+android=17
 download_only=0
 check_only=0
 gh_mirror="${GH_MIRROR:-https://gh-proxy.com/}"
@@ -18,16 +20,22 @@ gpl_source_sha256="6129306d2423245f7dc74906f3a39d51927934f7e845b2d050c5698f34d39
 magisk_patch_url="https://raw.githubusercontent.com/topjohnwu/Magisk/v30.7/scripts/host_patch.sh"
 magisk_patch_sha256="1720669a684f75fe90a7318868dd4528f2e736a5ad5363f92a3c51c848d79703"
 
+original_args=("$@")
+
 usage() {
   cat <<'USAGE'
 Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
                            Tencent Android SDK mirror. Default: auto (probe).
-  --with-gpl               Also fetch the GPL-3.0 parts (microG signature
-                           module, Magisk host_patch.sh) from upstream and do a
-                           full AOSP + Magisk + microG build. Without it, a
-                           pure AOSP build is installed.
+  --android 16|17          Android version (default 17). If the Android 17 install
+                           fails, you are offered a retry on Android 16.
+  --pure                   Install the pure AOSP edition only: no Magisk, no microG,
+                           no GPL-3.0 parts.
+  (default)                Full edition: AOSP + Magisk + microG, which also fetches
+                           the GPL-3.0 parts (microG signature module, Magisk
+                           host_patch.sh) from upstream. --with-gpl is accepted
+                           as an alias.
   --download-only          Only fill ./runtime-cache, do not install.
   --check                  Only check prerequisites.
   -h, --help               Show this help.
@@ -41,12 +49,19 @@ while [[ $# -gt 0 ]]; do
     --mirror) mirror="${2:-}"; shift 2 ;;
     --mirror=*) mirror="${1#*=}"; shift ;;
     --with-gpl) with_gpl=1; shift ;;
+    --pure) with_gpl=0; shift ;;
+    --android) android="${2:-}"; shift 2 ;;
+    --android=*) android="${1#*=}"; shift ;;
     --download-only) download_only=1; shift ;;
     --check) check_only=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+[[ -n "${AEROANDROID_FORCE_ANDROID:-}" ]] && android="$AEROANDROID_FORCE_ANDROID"   # set by the fallback below
+export ANDROID_SUBSYSTEM_LOCK="$lock_file"
+case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
+lock_file="$(lock_for "$android")"
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -60,11 +75,11 @@ sha256_of() {
 check_prereqs() {
   local ok=1
   say '检查环境 / Checking prerequisites'
-  if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
-    echo '  ✗ 需要 Apple Silicon Mac / Requires an Apple Silicon Mac (macOS, arm64)'; ok=0
+  if [[ "$(uname -s)" != Darwin ]]; then
+    echo '  ✗ 需要 Mac / Requires a Mac (Apple Silicon or Intel)'; ok=0
   else
     local ver; ver="$(sw_vers -productVersion)"
-    if [[ "${ver%%.*}" -lt 14 ]]; then echo "  ✗ macOS $ver < 14"; ok=0; else echo "  ✓ macOS $ver arm64"; fi
+    if [[ "${ver%%.*}" -lt 14 ]]; then echo "  ✗ macOS $ver < 14"; ok=0; else echo "  ✓ macOS $ver $HOST_ARCH"; fi
     if xcrun --find swift >/dev/null 2>&1; then echo '  ✓ Xcode Command Line Tools'
     else echo '  ✗ Xcode Command Line Tools — run: xcode-select --install'; ok=0; fi
   fi
@@ -114,7 +129,7 @@ fetch() { # url dest sha256
 
 fetch_runtime() {
   say "下载运行时到 / Downloading runtime into $cache"
-  local lock="$project_root/scripts/runtime-lock.json"
+  local lock="$lock_file"
   local line url rel sha
   while IFS=$'\t' read -r url rel sha; do
     line="$rel"; fetch "$url" "$cache/$line" "$sha"
@@ -143,11 +158,11 @@ fetch_gpl() {
   ──────────────────────────────────────────────────────────────────────
   GPL-3.0 NOTICE / 许可证提示
   The following components are licensed under GPL-3.0, NOT Apache-2.0,
-  and are downloaded from upstream only because you passed --with-gpl:
+  and are downloaded from upstream because you are building the full edition (use --pure to skip):
     · microg-spoof/  (MicroG Signature Compatibility, derived from FakeGApps)
     · third_party/Magisk/host_patch.sh  (topjohnwu/Magisk v30.7)
   They stay under their own license. Do not redistribute them as Apache-2.0.
-  以上组件为 GPL-3.0，仅因你使用了 --with-gpl 才从上游下载，保持其原许可证。
+  以上组件为 GPL-3.0，因构建完整版而从上游下载（--pure 可跳过），保持其原许可证。
   ──────────────────────────────────────────────────────────────────────
 
 NOTICE
@@ -156,6 +171,18 @@ NOTICE
   unzip -q "$tmp/source.zip" 'AndroidSubsystem/microg-spoof/*' -d "$tmp"
   rm -rf "$project_root/microg-spoof"
   mv "$tmp/AndroidSubsystem/microg-spoof" "$project_root/microg-spoof"
+  # The module's hooks exist unchanged in Android 17 (checked against android-17.0.0_r1);
+  # only its Android-16-only SDK_INT gate needs to admit API 37. A modified GPL-3.0 file stays GPL-3.0.
+  python3 - "$project_root/microg-spoof/src/dev/dan/androidsubsystem/microgspoof/SignatureCompat.java" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path).read()
+old = 'Build.VERSION.SDK_INT != 36) return;'
+new = 'Build.VERSION.SDK_INT != 36 && Build.VERSION.SDK_INT != 37) return;'
+if old not in text and new not in text:
+    sys.exit('microg-spoof changed upstream: SDK_INT gate not found; refusing to continue')
+open(path, 'w').write(text.replace(old, new))
+PY
   mkdir -p "$project_root/third_party/Magisk"
   fetch "$magisk_patch_url" "$project_root/third_party/Magisk/host_patch.sh" "$magisk_patch_sha256"
   rm -rf "$tmp"
@@ -164,7 +191,7 @@ NOTICE
 # Unpack a private JDK + build-tools + android.jar from the verified cache so
 # the guest APKs can be compiled before the installer runs.
 bootstrap_toolchain() {
-  local tc="$cache/toolchain" lock="$project_root/scripts/runtime-lock.json" rel tmp top
+  local tc="$cache/toolchain" lock="$lock_file" rel tmp top
   say "准备编译工具链 / Preparing build toolchain in $tc"
   mkdir -p "$tc/sdk/build-tools" "$tc/sdk/platforms"
   for kind in jdk build-tools platform; do
@@ -204,7 +231,25 @@ PY
   )
 }
 
+intel_notice() {
+  cat <<'NOTICE'
+
+  ──────────────────────────────────────────────────────────────────────
+  Intel Mac detected / 检测到 Intel Mac
+  Android runs here as x86_64. Many Android apps, especially most 3D games,
+  ship only arm64 code and will NOT install or run. Apps written in plain
+  Java/Kotlin and apps with x86_64 code work. It is also slower than on
+  Apple Silicon.
+  这里的安卓以 x86_64 运行。很多安卓应用，尤其是大多数 3D 游戏，只含 arm64
+  代码，将无法安装或运行；纯 Java/Kotlin 应用和带 x86_64 代码的应用可用。
+  速度也低于 Apple 芯片的 Mac。
+  ──────────────────────────────────────────────────────────────────────
+
+NOTICE
+}
+
 main() {
+  if [[ "$HOST_ARCH" != arm64 ]]; then intel_notice; fi
   check_prereqs || { [[ "$check_only" == 1 ]] && exit 1; die '环境检查未通过 / prerequisites missing'; }
   [[ "$check_only" == 1 ]] && { say '环境检查通过 / All prerequisites OK'; exit 0; }
   pick_mirror
@@ -216,7 +261,14 @@ main() {
   if [[ "$with_gpl" == 1 ]]; then export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=0
   else export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=1; fi
   say '开始编译与安装 / Building and installing'
-  exec /bin/bash "$project_root/Install.command"
+  /bin/bash "$project_root/Install.command" && exit 0
+  local status=$?
+  if [[ "$android" == 17 && -t 0 ]]; then
+    printf '\n安卓 17 安装未完成。改用安卓 16 重试？/ Android 17 install did not finish. Retry on Android 16? [y/N] '
+    read -r answer || answer=''
+    if [[ "$answer" == [yY]* ]]; then AEROANDROID_FORCE_ANDROID=16 exec /bin/bash "$0" "${original_args[@]}"; fi
+  fi
+  exit "$status"
 }
 
 main

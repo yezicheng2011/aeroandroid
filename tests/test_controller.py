@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import plistlib
 from pathlib import Path
 import signal
 import socket
@@ -22,7 +23,7 @@ class IntegrationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.sdk = self.root / 'sdk with spaces'
         self.fixture = Path(__file__).with_name('fake_runtime.py')
-        for location in ['platform-tools/adb', 'emulator/emulator', 'cmdline-tools/latest/bin/avdmanager', 'cmdline-tools/latest/bin/sdkmanager']:
+        for location in ['platform-tools/adb', 'emulator/emulator', 'cmdline-tools/latest/bin/avdmanager', 'cmdline-tools/latest/bin/sdkmanager', 'build-tools/36.0.0/aapt2']:
             tool = self.sdk / location; tool.parent.mkdir(parents=True, exist_ok=True)
             tool.write_bytes(self.fixture.read_bytes()); tool.chmod(0o755)
         image = self.sdk / 'system-images/android-36/default/arm64-v8a/system.img'
@@ -32,6 +33,9 @@ class IntegrationTests(unittest.TestCase):
         self.environment.start()
         self.mac = patch.object(subsystem.platform, 'system', return_value='Darwin'); self.mac.start()
         self.arm = patch.object(subsystem.platform, 'machine', return_value='arm64'); self.arm.start()
+        # The fixture SDK only has the Android 16 image; the product default is Android 17.
+        (self.root / 'state').mkdir()
+        subsystem.atomic_json(self.root / 'state/config.json', {'android': 16, 'image_tag': 'default'})
         self.controller = subsystem.Controller(self.root / 'state')
         actual_tool = self.controller.tool
         self.controller.tool = lambda name: str(scrcpy) if name == 'scrcpy' else actual_tool(name)
@@ -70,6 +74,79 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.controller.status()['state'], 'stopped')
         self.assertTrue(self.controller.configured())
         self.assertEqual(self.controller.boot()['state'], 'running')
+        self.controller.stop()
+
+    def test_install_app_builds_a_dock_ready_mac_app_with_the_android_icon(self):
+        passthrough = subprocess.run
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0, '', '')
+                                                    if argv[0].startswith('/usr/bin/') else passthrough(argv, **kw))
+        app = self.root / 'Android Subsystem.app'
+        (app / 'Contents/MacOS').mkdir(parents=True)
+        (app / 'Contents/MacOS/AndroidSubsystem').write_bytes(b'binary')
+        apk = self.root / 'fixture.apk'; apk.write_bytes(b'test')
+        apps = self.root / 'Applications'
+        result = self.controller.install_app([str(apk)], str(app), str(apps))
+        self.assertEqual((result['package'], result['label']), ('com.example.fixture', 'Fixture App'))
+        launcher = Path(result['launcher'])
+        self.assertEqual(launcher, apps / 'Fixture App.app')
+        info = plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())
+        self.assertEqual((info['AndroidPackage'], info['CFBundleIconFile']), ('com.example.fixture', 'AppIcon'))
+        self.assertNotIn('LSUIElement', info)   # a normal app: it has a Dock icon of its own
+        icns = (launcher / 'Contents/Resources/AppIcon.icns').read_bytes()
+        self.assertEqual((icns[:4], int.from_bytes(icns[4:8], 'big'), icns[8:12]), (b'icns', len(icns), b'ic09'))
+        self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'binary')
+        # Installing again (an update) refreshes the same app; a foreign folder is never overwritten.
+        self.assertEqual(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'], str(launcher))
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'already exists'):
+            self.controller.export_launcher('com.example.other', 'Fixture App', str(app), str(apps), replace=True)
+        with self.assertRaisesRegex(subsystem.SubsystemError, '512x512'):
+            subsystem.icns_from_png(b'not a png')
+        self.controller.stop()
+
+    def test_quick_boot_is_opt_in_and_prime_clears_stale_snapshots(self):
+        self.controller.boot()
+        self.assertIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))
+        self.controller.stop()
+        stale = self.controller.avd_home / f'{self.controller.avd}.avd/snapshots/default_boot/ram.bin'
+        stale.parent.mkdir(parents=True); stale.write_bytes(b'old')
+        self.assertEqual(self.controller.prime(), {'quick_boot': True})
+        self.assertFalse(stale.exists())
+        self.assertTrue((self.controller.root / 'quick-boot').is_file())
+        self.assertNotIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))
+        self.assertEqual(self.controller.status()['state'], 'stopped')
+
+    def test_apk_that_cannot_run_on_this_cpu_gets_a_plain_explanation(self):
+        apk = self.root / 'game.apk'; apk.write_bytes(b'arm64 only')
+        with self.assertRaisesRegex(subsystem.SubsystemError, r'x86_64,x86\). On an Intel Mac, apps built only for arm64'):
+            self.controller.install([str(apk)])
+        self.controller.stop()
+
+    def test_gpu_mode_is_configurable_and_validated_and_fps_reaches_60(self):
+        self.controller.boot()
+        args = json.loads((self.root / 'emulator-argv.json').read_text())
+        self.assertEqual(args[args.index('-gpu') + 1], 'auto')
+        self.controller.stop()
+        self.controller.configure({'gpu': 'host', 'fps': 60})
+        self.controller.boot()
+        args = json.loads((self.root / 'emulator-argv.json').read_text())
+        self.assertEqual(args[args.index('-gpu') + 1], 'host')
+        bundle = self.root / 'bridge bundle'; (bundle / 'backend').mkdir(parents=True)
+        (bundle / 'MacBridge.apk').write_bytes(b'bridge')
+        with patch.object(subsystem, '__file__', str(bundle / 'backend/subsystem.py')):
+            self.assertEqual(self.controller.native_session('com.example.first')['fps'], 60)
+        self.controller.stop()
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'GPU mode'):
+            self.controller.configure({'gpu': 'software'})
+
+    def test_mac_camera_is_passed_through_only_when_one_is_connected(self):
+        self.controller.boot()
+        self.assertNotIn('-camera-back', json.loads((self.root / 'emulator-argv.json').read_text()))
+        self.controller.stop()
+        (self.root / 'webcam').touch()
+        self.controller.boot()
+        args = json.loads((self.root / 'emulator-argv.json').read_text())
+        self.assertEqual(args[args.index('-camera-back') + 1], 'webcam0')
+        self.assertEqual(args[args.index('-camera-front') + 1], 'webcam0')
         self.controller.stop()
 
     def test_native_bridge_reuses_authenticated_service_and_cleans_forward(self):

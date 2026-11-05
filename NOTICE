@@ -1,22 +1,32 @@
-aeroandroid (Android Subsystem for Apple Silicon Macs)
-Copyright 2026 daniel.yeå¶å­è¯
+aeroandroid (Android Subsystem for Apple Silicon and Intel Macs)
+Copyright 2026 daniel.ye叶子诚
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
+See docs/LICENSING.md for how each component below is used and what you must do if you redistribute a build.
 
 Third-party components included in this repository:
 - third_party/GSFProxy: microG GsfProxy, commit ff1b9aa3e235904009f1d87113391abb51808af1,
-  https://github.com/microg/GsfProxy — Apache-2.0 (code); CC-BY-SA-4.0 / CC0-1.0 for some
-  docs/artwork as recorded in third_party/GSFProxy/.reuse and LICENSES/.
+  https://github.com/microg/GsfProxy — Apache-2.0 (code); the launcher icons under
+  services-framework-proxy/src/main/res/mipmap-*/ are CC-BY-SA-4.0 (copyright 2015 microG Project Team),
+  and some documentation is CC0-1.0, as recorded in third_party/GSFProxy/.reuse and LICENSES/.
+  Keep those files with the source.
 
-Third-party components downloaded at build/run time (NOT included here; each keeps its own license):
-- Android SDK emulator, platform, build-tools, cmdline-tools, arm64-v8a system image (Android SDK License / AOSP licenses)
-- OpenJDK 17 (Temurin, GPL-2.0 with Classpath Exception)
+Third-party components downloaded at build/run time on the user's own Mac (NOT included here; each keeps its own license):
+- Android SDK emulator, platform, build-tools, cmdline-tools, platform-tools and the arm64-v8a / x86_64 system image
+  (Android SDK License / AOSP licenses; the installer shows the SDK license for you to accept)
+- OpenJDK 17 (Eclipse Temurin, GPL-2.0 with Classpath Exception)
 - python-build-standalone CPython 3.12 (PSF License)
 - scrcpy v5.0.1 (Apache-2.0)
-- Magisk v30.7 and its host_patch.sh (GPL-3.0)
+- Magisk v30.7 (Android 16) / v31.0 (Android 17) and its host_patch.sh (GPL-3.0)
 - Vector (LSPosed fork) v2.2 (GPL-3.0)
-- microG GmsCore / Play Store APKs (Apache-2.0 / proprietary respectively)
+- microG GmsCore and microG Companion APKs (Apache-2.0)
+- Aurora Store (GPL-3.0-or-later) and Fennec F-Droid (MPL-2.0), pre-installed from pinned F-Droid APKs
 
 Not included because they are GPL-3.0 (copyleft) and cannot be relicensed:
-- microg-spoof/ (MicroG Signature Compatibility module, derived from FakeGApps, GPL-3.0-only)
+- microg-spoof/ (MicroG Signature Compatibility module, derived from FakeGApps, GPL-3.0-only);
+  build.sh changes one line of it (the Android version gate) after download, and the result stays GPL-3.0
 - third_party/Magisk/host_patch.sh (GPL-3.0)
+
+Original work in this repository (Swift, C, Java, Python, shell, the logo in assets/) is Apache-2.0.
+Android is a trademark of Google LLC. This project is not affiliated with or endorsed by Google, Magisk,
+microG, Mozilla or any other project named here.
