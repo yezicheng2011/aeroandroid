@@ -133,6 +133,11 @@ class Controller:
     def api(self):
         return self.config["android"] + 20
 
+    @property
+    def image_api(self):
+        """SDK folder name of the system image; Android 17 is published as android-37.0."""
+        return "37.0" if self.api == 37 else str(self.api)
+
     def loaded_config(self, saved):
         config = {**DEFAULTS, **saved}
         # Existing installations must remain identifiable so they can be stopped
@@ -275,7 +280,7 @@ class Controller:
                 checks.append({"name": name, "ok": True, "detail": p})
             except SubsystemError as e:
                 checks.append({"name": name, "ok": False, "detail": str(e)})
-        image = self.sdk / f"system-images/android-{self.api}/{self.image_tag}/arm64-v8a/system.img"
+        image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/arm64-v8a/system.img"
         checks.append({"name": f"Android {self.config['android']} ARM64 image", "ok": image.exists(),
                       "detail": str(image)})
         try:
@@ -315,11 +320,11 @@ class Controller:
                 raise SubsystemError("Legacy Google image is retained only for migration; select the AOSP runtime")
             if self.configured():
                 return {"avd": self.avd, "created": False}
-            image = self.sdk / f"system-images/android-{self.api}/{self.image_tag}/arm64-v8a/system.img"
+            image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/arm64-v8a/system.img"
             if not image.is_file():
                 raise SubsystemError(f"Android {self.config['android']} image missing. Run setup-mac.sh {self.config['android']}")
             self.run([self.tool("avdmanager"), "--verbose", "create", "avd", "--name", self.avd,
-                      "--package", f"system-images;android-{self.api};{self.image_tag};arm64-v8a",
+                      "--package", f"system-images;android-{self.image_api};{self.image_tag};arm64-v8a",
                       "--path", str(self.avd_home / f"{self.avd}.avd")], timeout=90, input="no\n")
             config_file = self.avd_home / f"{self.avd}.avd/config.ini"
             settings = dict(line.split("=", 1) for line in config_file.read_text().splitlines()

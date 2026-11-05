@@ -28,8 +28,13 @@ about 20 GB of free disk and an internet connection (about 1.8 GB of Android run
 ```bash
 ./build.sh                # full edition: AOSP + Magisk + microG + pre-installed apps
 ./build.sh --pure         # AOSP only: no Magisk, no microG, no GPL-3.0 parts
+./build.sh --android 17   # Android 17 (API 37), pure AOSP edition (see below)
 ./build.sh --mirror cn    # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ```
+
+**Android 17** (`--android 17`) uses Google's stable `android-37.0` arm64 image and a newer emulator (37.2.13), both
+pinned in `scripts/runtime-lock-17.json`. It builds the pure AOSP edition only: Magisk, Vector and microG are
+validated on Android 16, so the full edition stays on 16 until they are tested on 17. Android 16 remains the default.
 
 Details and troubleshooting: [BUILD.md](BUILD.md). Every download is checked against a pinned SHA-256.
 Prefer not to build? An offline package is at <https://aeroandroid.com/releases.html>.
@@ -77,7 +82,7 @@ that every Google API, Play Integrity or banking app works. See [docs/MICROG.md]
 
 ## Known limits
 
-- Apple Silicon and macOS 14+ only. Android 16 (AOSP) only.
+- Apple Silicon and macOS 14+ only. Android 16 (AOSP, default) or Android 17 (pure AOSP, new and untested on a Mac).
 - The subsystem keeps running in the background after you close an app's window; stop it from the menu bar item.
 - Camera: the Mac camera is passed to the emulator as `webcam0` for both the front and back camera.
   macOS asks for camera permission the first time.

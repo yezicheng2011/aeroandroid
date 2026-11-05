@@ -1,0 +1,94 @@
+{
+  "android": 17,
+  "host": "macosx",
+  "image_tag": "default",
+  "archives": [
+    {
+      "package": "platforms;android-36",
+      "host": "macosx",
+      "name": "platform-36_r02.zip",
+      "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+      "size": 65878410,
+      "sha1": "2c1a80dd4d9f7d0e6dd336ec603d9b5c55a6f576",
+      "sha256": "37607369a28c5b640b3a7998868d45898ebcb777565a0e85f9acf36f29631d2e",
+      "relative_path": "android16-macos/platform-36_r02.zip"
+    },
+    {
+      "package": "build-tools;36.0.0",
+      "host": "macosx",
+      "name": "build-tools_r36_macosx.zip",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_macosx.zip",
+      "size": 79121749,
+      "sha1": "199ae0047ee61e842f8ee0c6d3918e44fb9a1f83",
+      "sha256": "04e7f3a72044de4926fa038fa0e251a37bba1e1c3fb8beab6f8401bfd9eb4bf3",
+      "relative_path": "android16-macos/build-tools_r36_macosx.zip"
+    },
+    {
+      "package": "cmdline-tools;latest",
+      "host": "macosx",
+      "name": "commandlinetools-mac_arm64-16111833_latest.zip",
+      "url": "https://dl.google.com/android/repository/commandlinetools-mac_arm64-16111833_latest.zip",
+      "size": 155384151,
+      "sha1": "ad03dc49bfacfd52c110b14104ea548b8a07e830",
+      "sha256": "58da8f215781cc0208743e88b65ae259780c55e7eb40e50373d377cf369232d6",
+      "relative_path": "android16-macos/commandlinetools-mac_arm64-16111833_latest.zip"
+    },
+    {
+      "package": "platform-tools",
+      "host": "macosx",
+      "name": "platform-tools_r37.0.1-darwin.zip",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-darwin.zip",
+      "size": 16110554,
+      "sha1": "6ae73f4de6452dc57e62ec02b68eed92a4c21661",
+      "sha256": "ee39ad5967e95c2a07f04dbcbde96b1a0c916ba376096db5d2f498b7727a5d1d",
+      "relative_path": "android16-macos/platform-tools_r37.0.1-darwin.zip"
+    },
+    {
+      "package": "emulator",
+      "host": "macosx",
+      "name": "emulator-darwin_aarch64-16740729.zip",
+      "url": "https://dl.google.com/android/repository/emulator-darwin_aarch64-16740729.zip",
+      "size": 416113219,
+      "sha1": "6c5e61b873e11c7d1d08683bea089f762baee070",
+      "relative_path": "android17-macos/emulator-darwin_aarch64-16740729.zip",
+      "sha256": "9e50ac521c38949d412f69250c0df9a4afa684d5be54ab4b80fc0205a73f5054"
+    },
+    {
+      "package": "system-images;android-37.0;default;arm64-v8a",
+      "host": "macosx",
+      "name": "arm64-v8a-37.0_r06.zip",
+      "url": "https://dl.google.com/android/repository/sys-img/android/arm64-v8a-37.0_r06.zip",
+      "size": 865756849,
+      "sha1": "f94cb780748169b5944b7c2e5c0693e5077ec8c4",
+      "relative_path": "android17-macos/arm64-v8a-37.0_r06.zip",
+      "sha256": "ffccd67f6e26b1f4911854ba4e8510b2990ab6c71af33f71864d38bf5d80c57e"
+    },
+    {
+      "name": "OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.20.1_1.tar.gz",
+      "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.20.1_1.tar.gz",
+      "sha256": "196d13ba5f10414bef7f6a05a9b3f00edacb18ebacef2b99485db9e2ee18f0e8",
+      "host": "macosx",
+      "kind": "jdk",
+      "size": 185851019,
+      "relative_path": "mac-tools/OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.20.1_1.tar.gz"
+    },
+    {
+      "name": "scrcpy-macos-aarch64-v5.0.1.tar.gz",
+      "url": "https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-macos-aarch64-v5.0.1.tar.gz",
+      "sha256": "33611e51977a8289e2e124b220f727895181ef2eb9060e0987a4dc2db9cf0d6b",
+      "host": "macosx",
+      "kind": "scrcpy",
+      "size": 12565912,
+      "relative_path": "mac-tools/scrcpy-macos-aarch64-v5.0.1.tar.gz"
+    },
+    {
+      "name": "cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.12.15%2B20261009-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8",
+      "host": "macosx",
+      "kind": "python",
+      "size": 25165569,
+      "relative_path": "mac-tools/cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz"
+    }
+  ]
+}

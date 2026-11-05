@@ -8,6 +8,7 @@ project_root="$(cd "$(dirname "$0")" && pwd)"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$project_root/runtime-cache}"
 mirror="auto"          # auto | cn | global
 with_gpl=1
+android=16
 download_only=0
 check_only=0
 gh_mirror="${GH_MIRROR:-https://gh-proxy.com/}"
@@ -24,6 +25,8 @@ Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
                            Tencent Android SDK mirror. Default: auto (probe).
+  --android 16|17          Android version (default 16). 17 is the pure AOSP edition
+                           only: Magisk and microG are validated on 16 only.
   --pure                   Install the pure AOSP edition only: no Magisk, no microG,
                            no GPL-3.0 parts.
   (default)                Full edition: AOSP + Magisk + microG, which also fetches
@@ -44,12 +47,21 @@ while [[ $# -gt 0 ]]; do
     --mirror=*) mirror="${1#*=}"; shift ;;
     --with-gpl) with_gpl=1; shift ;;
     --pure) with_gpl=0; shift ;;
+    --android) android="${2:-}"; shift 2 ;;
+    --android=*) android="${1#*=}"; shift ;;
     --download-only) download_only=1; shift ;;
     --check) check_only=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
+lock_file="$project_root/scripts/runtime-lock.json"
+if [[ "$android" == 17 ]]; then
+  lock_file="$project_root/scripts/runtime-lock-17.json"
+  with_gpl=0   # Magisk, Vector and microG are only validated on Android 16
+fi
+export ANDROID_SUBSYSTEM_LOCK="$lock_file"
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -117,7 +129,7 @@ fetch() { # url dest sha256
 
 fetch_runtime() {
   say "下载运行时到 / Downloading runtime into $cache"
-  local lock="$project_root/scripts/runtime-lock.json"
+  local lock="$lock_file"
   local line url rel sha
   while IFS=$'\t' read -r url rel sha; do
     line="$rel"; fetch "$url" "$cache/$line" "$sha"
@@ -167,7 +179,7 @@ NOTICE
 # Unpack a private JDK + build-tools + android.jar from the verified cache so
 # the guest APKs can be compiled before the installer runs.
 bootstrap_toolchain() {
-  local tc="$cache/toolchain" lock="$project_root/scripts/runtime-lock.json" rel tmp top
+  local tc="$cache/toolchain" lock="$lock_file" rel tmp top
   say "准备编译工具链 / Preparing build toolchain in $tc"
   mkdir -p "$tc/sdk/build-tools" "$tc/sdk/platforms"
   for kind in jdk build-tools platform; do
