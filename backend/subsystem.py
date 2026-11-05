@@ -765,7 +765,9 @@ class Controller:
         info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.app." + package,
                 "CFBundleName": label, "CFBundleDisplayName": label, "CFBundleIconFile": "AppIcon",
                 "CFBundleExecutable": "AndroidSubsystem", "CFBundlePackageType": "APPL",
-                "CFBundleVersion": "1", "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
+                "CFBundleShortVersionString": "0.3.0", "CFBundleVersion": "1",
+                "NSHumanReadableCopyright": "Copyright © 2026 daniel.ye叶子诚",
+                "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
                 "NSCameraUsageDescription": "This Android app can use the Mac camera.",
                 "AndroidPackage": package, "SubsystemAppPath": str(app)}
         with (contents / "Info.plist").open("wb") as f:
