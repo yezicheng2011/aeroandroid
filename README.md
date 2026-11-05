@@ -26,4 +26,4 @@ See `docs/` for details.
 
 ## License
 
-Apache-2.0, Copyright 2026 daniel.ye. See `NOTICE` for third-party components.
+Apache-2.0, Copyright 2026 daniel.yeå¶å­è¯. See `NOTICE` for third-party components.
