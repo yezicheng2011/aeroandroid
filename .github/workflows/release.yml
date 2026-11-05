@@ -97,6 +97,9 @@ jobs:
           test ! -e dmgroot/aeroandroid-source/microg-spoof && test ! -e dmgroot/aeroandroid-source/third_party/Magisk
           xattr -cr dmgroot
           hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "out/aeroandroid-$v-macOS-arm64.dmg"
+          # Ad-hoc sign the disk image too (free, no Apple Developer account).
+          codesign --force --timestamp=none --sign - "out/aeroandroid-$v-macOS-arm64.dmg"
+          codesign --verify --verbose=2 "out/aeroandroid-$v-macOS-arm64.dmg"
           mnt="$(hdiutil attach -nobrowse -readonly "out/aeroandroid-$v-macOS-arm64.dmg" | awk -F'\t' '/\/Volumes\// {print $NF}' | tail -1)"
           echo "mounted at $mnt"; ls -la "$mnt"
           codesign --verify --deep --strict "$mnt/Android Subsystem.app"

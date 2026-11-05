@@ -21,8 +21,16 @@ aeroandroid 0.2.1 · 安卓子系统（Android Subsystem for Apple Silicon Macs�
 本软件使用免费的 ad-hoc 签名，没有苹果开发者证书，所以不会显示「已损坏」，但会提示「无法验证开发者」。
 按上面第 1 步右键「打开」即可。
 
-默认安装纯 AOSP 版（不含 Magisk / microG）。完整版：cd ~/aeroandroid && ./build.sh --with-gpl
-（会从上游下载 GPL-3.0 组件，它们保持各自的许可证。）
+默认安装完整版（AOSP + Magisk + microG，预装 Aurora Store 和 Fennec 浏览器；Mac 摄像头可在安卓相机中使用）。
+只要纯 AOSP：cd ~/aeroandroid && ./build.sh --pure
+完整版会从上游下载 GPL-3.0 组件，它们保持各自的许可证。
+
+【安装之后】
+双击任意 .apk 文件即可安装：会在 ~/Applications 生成同名 Mac 应用，在启动台和 Dock 中打开，只显示该应用的窗口。
+安装结束时会保存一份「快速启动」快照（占用磁盘约等于内存设置），所以第一次打开应用只需几秒，而不是冷启动。
+
+【终端里解除隔离（可选）】
+如果 macOS 仍然拦截：xattr -dr com.apple.quarantine "/Applications/Android Subsystem.app"
 
 日志：~/Library/Application Support/AndroidSubsystem/logs/
 许可证：Apache-2.0，见 LICENSE / NOTICE。项目主页：https://github.com/yezicheng2011/aeroandroid
@@ -33,3 +41,7 @@ Settings → Privacy & Security → Open Anyway). It copies the source to ~/aero
 which downloads the pinned runtime (~1.8 GB, SHA-256 checked), builds and installs
 ~/Applications/Android Subsystem.app. Use that installed copy; the prebuilt app in this DMG is a preview.
 Ad-hoc signed (free): macOS shows "cannot verify developer", not "damaged".
+Default is now the full edition (--pure for AOSP only). After installing, double-click any .apk: it becomes a
+Mac app in ~/Applications with its own Dock icon. A Quick Boot snapshot is saved at the end of the install
+(disk use about the RAM setting) so the first app launch takes seconds.
+If macOS still blocks the app: xattr -dr com.apple.quarantine "/Applications/Android Subsystem.app"

@@ -100,6 +100,18 @@ class IntegrationTests(unittest.TestCase):
             subsystem.icns_from_png(b'not a png')
         self.controller.stop()
 
+    def test_quick_boot_is_opt_in_and_prime_clears_stale_snapshots(self):
+        self.controller.boot()
+        self.assertIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))
+        self.controller.stop()
+        stale = self.controller.avd_home / f'{self.controller.avd}.avd/snapshots/default_boot/ram.bin'
+        stale.parent.mkdir(parents=True); stale.write_bytes(b'old')
+        self.assertEqual(self.controller.prime(), {'quick_boot': True})
+        self.assertFalse(stale.exists())
+        self.assertTrue((self.controller.root / 'quick-boot').is_file())
+        self.assertNotIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))
+        self.assertEqual(self.controller.status()['state'], 'stopped')
+
     def test_mac_camera_is_passed_through_only_when_one_is_connected(self):
         self.controller.boot()
         self.assertNotIn('-camera-back', json.loads((self.root / 'emulator-argv.json').read_text()))

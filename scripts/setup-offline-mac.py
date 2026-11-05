@@ -247,6 +247,9 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-microg.py'), str(cache)], env=env, check=True)
             subprocess.run([sys.executable, str(PROJECT / 'scripts/preinstall-apps.py'), str(cache)], env=env, check=True)
             retire_legacy_google_image(root)
+        # Save a Quick Boot snapshot now so the first app you open starts in seconds. Only a speed-up.
+        primed = subprocess.run([sys.executable, str(PROJECT / 'backend/subsystem.py'), 'prime'], env=env)
+        if primed.returncode: print('快速启动快照未保存，首次打开会较慢 / Quick Boot snapshot not saved; first launch will be slower.')
         app_folder = Path.home() / 'Applications'
         app_folder.mkdir(exist_ok=True)
         built = PROJECT / 'dist/Android Subsystem.app'

@@ -34,8 +34,19 @@ about 20 GB of free disk and an internet connection (about 1.8 GB of Android run
 Details and troubleshooting: [BUILD.md](BUILD.md). Every download is checked against a pinned SHA-256.
 Prefer not to build? An offline package is at <https://aeroandroid.com/releases.html>.
 
+The installer saves a Quick Boot snapshot at the end, so the first app you open starts in seconds instead of
+cold booting (the snapshot takes disk space about equal to the memory setting).
+
 After the build, `Android Subsystem.app` is in `~/Applications`. Open it once: that makes the APK installer
 the default app for `.apk` files. From then on, double-clicking any APK is all it takes.
+
+## Signing and downloads
+
+Release builds are signed ad hoc (free, no Apple Developer account), including the installer helper and the DMG,
+so macOS does not call the app "damaged". Without a paid Developer ID and notarization macOS still says it cannot
+verify the developer: right-click the app and choose Open, or run
+`xattr -dr com.apple.quarantine "/Applications/Android Subsystem.app"`. Mac apps the subsystem creates for your
+Android apps are made and signed on your own Mac, so they open without any prompt.
 
 ## How it fits together
 

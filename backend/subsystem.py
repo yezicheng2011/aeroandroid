@@ -89,6 +89,9 @@ class Controller:
         self.logs = self.root / "logs"
         self.logs.mkdir(exist_ok=True)
         self.runner = runner or subprocess.run
+        # Quick Boot snapshots are for everyday use only. Provisioning builds a Controller
+        # directly and always cold boots, because Magisk modules apply at boot.
+        self.quick_boot = False
         self.children = {}
         saved = read_json(self.root / "config.json", {})
         self.config = self.loaded_config(saved)
@@ -374,7 +377,9 @@ class Controller:
                 argv = [self.tool("emulator"), "-avd", self.avd, "-port", str(self.config["port"]),
                         "-no-window", "-no-boot-anim", "-gpu", "auto", "-accel", "on",
                         "-memory", str(self.config["memory_mb"]), "-cores", str(self.config["cores"]),
-                        "-no-snapshot", "-no-metrics", *self.webcam_flags()]
+                        "-no-metrics", *self.webcam_flags()]
+                if not self.quick_boot:
+                    argv.append("-no-snapshot")
                 if self.config.get("magisk_ramdisk"):
                     ramdisk = Path(self.config["magisk_ramdisk"]).resolve()
                     expected_dir = self.magisk_image_dir.resolve()
@@ -440,7 +445,7 @@ class Controller:
                 self.adb("emu", "kill", check=False)
             else:
                 self.terminate(read_json(self.root / "emulator.json", {}))
-            deadline = time.monotonic() + 15
+            deadline = time.monotonic() + (90 if self.quick_boot else 15)   # Quick Boot saves RAM on exit
             while time.monotonic() < deadline:
                 if not self.running_emulator() and not self.device() and not self.unconfirmed_shutdown():
                     break
@@ -453,6 +458,17 @@ class Controller:
                     child.wait()
                     self.children.pop(pid, None)
             return {"state": "stopped"}
+
+    def prime(self):
+        """Boot once with Quick Boot, then stop, so the first app launch restores a snapshot
+        (seconds) instead of cold booting (minutes). Run at the end of every install."""
+        self.stop()
+        shutil.rmtree(self.avd_home / f"{self.avd}.avd/snapshots", ignore_errors=True)   # never restore a stale one
+        (self.root / "quick-boot").touch()
+        self.quick_boot = True
+        self.boot()
+        self.stop()
+        return {"quick_boot": True}
 
     def native_session(self, package):
         package_name(package)
@@ -744,6 +760,7 @@ def dispatch(controller, action, params):
              "files": lambda: controller.files(), "pull": lambda: controller.pull(params["remote"], params["destination"]),
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
              "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
+             "prime": lambda: controller.prime(),
              "install-app": lambda: controller.install_app(params["files"], params["app_path"], params["destination"])}
     if action not in table:
         raise SubsystemError("Unknown action")
@@ -760,7 +777,9 @@ def main():
         params = json.loads(args.params)
         if not isinstance(params, dict):
             raise SubsystemError("Parameters must be a JSON object")
-        result = dispatch(Controller(args.root), args.action, params)
+        controller = Controller(args.root)
+        controller.quick_boot = (controller.root / "quick-boot").is_file()
+        result = dispatch(controller, args.action, params)
         print(json.dumps({"ok": True, "data": result}, ensure_ascii=False))
     except (SubsystemError, ValueError, KeyError, TypeError, OSError) as e:
         print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
