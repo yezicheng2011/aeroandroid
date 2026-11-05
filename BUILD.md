@@ -14,7 +14,7 @@
 ./build.sh                 # auto-pick mirror, build and install the pure-AOSP edition
 ./build.sh --mirror cn     # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ./build.sh --with-gpl      # full edition: also fetch GPL-3.0 parts, install Magisk + microG
-./build.sh --android 17    # Android 17 (API 37): pure AOSP only, newer pinned emulator
+./build.sh --android 16    # Android 16 instead of the default Android 17 (API 37)
 ./build.sh --check         # prerequisites only
 ./build.sh --download-only # only fill ./runtime-cache
 ```

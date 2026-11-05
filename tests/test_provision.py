@@ -15,6 +15,7 @@ provision = importlib.util.module_from_spec(spec); spec.loader.exec_module(provi
 
 class FakeController:
     api = 36
+    image_api = '36'
     image_tag = 'default'
 
     def __init__(self, root=None):

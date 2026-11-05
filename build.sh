@@ -8,7 +8,7 @@ project_root="$(cd "$(dirname "$0")" && pwd)"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$project_root/runtime-cache}"
 mirror="auto"          # auto | cn | global
 with_gpl=1
-android=16
+android=17
 download_only=0
 check_only=0
 gh_mirror="${GH_MIRROR:-https://gh-proxy.com/}"
@@ -19,14 +19,16 @@ gpl_source_sha256="6129306d2423245f7dc74906f3a39d51927934f7e845b2d050c5698f34d39
 magisk_patch_url="https://raw.githubusercontent.com/topjohnwu/Magisk/v30.7/scripts/host_patch.sh"
 magisk_patch_sha256="1720669a684f75fe90a7318868dd4528f2e736a5ad5363f92a3c51c848d79703"
 
+original_args=("$@")
+
 usage() {
   cat <<'USAGE'
 Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
                            Tencent Android SDK mirror. Default: auto (probe).
-  --android 16|17          Android version (default 16). 17 is the pure AOSP edition
-                           only: Magisk and microG are validated on 16 only.
+  --android 16|17          Android version (default 17). If the Android 17 install
+                           fails, you are offered a retry on Android 16.
   --pure                   Install the pure AOSP edition only: no Magisk, no microG,
                            no GPL-3.0 parts.
   (default)                Full edition: AOSP + Magisk + microG, which also fetches
@@ -55,13 +57,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
-case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
 lock_file="$project_root/scripts/runtime-lock.json"
-if [[ "$android" == 17 ]]; then
-  lock_file="$project_root/scripts/runtime-lock-17.json"
-  with_gpl=0   # Magisk, Vector and microG are only validated on Android 16
-fi
+[[ -n "${AEROANDROID_FORCE_ANDROID:-}" ]] && android="$AEROANDROID_FORCE_ANDROID"   # set by the fallback below
+if [[ "$android" == 17 ]]; then lock_file="$project_root/scripts/runtime-lock-17.json"; fi
 export ANDROID_SUBSYSTEM_LOCK="$lock_file"
+case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -171,6 +171,18 @@ NOTICE
   unzip -q "$tmp/source.zip" 'AndroidSubsystem/microg-spoof/*' -d "$tmp"
   rm -rf "$project_root/microg-spoof"
   mv "$tmp/AndroidSubsystem/microg-spoof" "$project_root/microg-spoof"
+  # The module's hooks exist unchanged in Android 17 (checked against android-17.0.0_r1);
+  # only its Android-16-only SDK_INT gate needs to admit API 37. A modified GPL-3.0 file stays GPL-3.0.
+  python3 - "$project_root/microg-spoof/src/dev/dan/androidsubsystem/microgspoof/SignatureCompat.java" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path).read()
+old = 'Build.VERSION.SDK_INT != 36) return;'
+new = 'Build.VERSION.SDK_INT != 36 && Build.VERSION.SDK_INT != 37) return;'
+if old not in text and new not in text:
+    sys.exit('microg-spoof changed upstream: SDK_INT gate not found; refusing to continue')
+open(path, 'w').write(text.replace(old, new))
+PY
   mkdir -p "$project_root/third_party/Magisk"
   fetch "$magisk_patch_url" "$project_root/third_party/Magisk/host_patch.sh" "$magisk_patch_sha256"
   rm -rf "$tmp"
@@ -231,7 +243,14 @@ main() {
   if [[ "$with_gpl" == 1 ]]; then export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=0
   else export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=1; fi
   say '开始编译与安装 / Building and installing'
-  exec /bin/bash "$project_root/Install.command"
+  /bin/bash "$project_root/Install.command" && exit 0
+  local status=$?
+  if [[ "$android" == 17 && -t 0 ]]; then
+    printf '\n安卓 17 安装未完成。改用安卓 16 重试？/ Android 17 install did not finish. Retry on Android 16? [y/N] '
+    read -r answer || answer=''
+    if [[ "$answer" == [yY]* ]]; then AEROANDROID_FORCE_ANDROID=16 exec /bin/bash "$0" "${original_args[@]}"; fi
+  fi
+  exit "$status"
 }
 
 main

@@ -25,7 +25,7 @@ import uuid
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\Z")
 COMPANION = "dev.dan.androidsubsystem"
 AUTHORITY = COMPANION + ".bridge"
-DEFAULTS = {"android": 16, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
+DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
             "resolution": "1280x960/200", "fps": 30, "bitrate": "12M"}
 
 

@@ -91,7 +91,7 @@ final class SubsystemModel: ObservableObject {
     @Published var apps: [AndroidApp] = []
     @Published var windows: Set<String> = []
     @Published var state = "unavailable"
-    @Published var android = 16
+    @Published var android = 17
     @Published var busy = false
     @Published var progress = ""
     @Published var error: String?
@@ -170,7 +170,7 @@ final class SubsystemModel: ObservableObject {
     func applyStatus(_ response: [String: Any]) {
         let old = state
         state = response["state"] as? String ?? "unavailable"
-        android = response["android"] as? Int ?? 16
+        android = response["android"] as? Int ?? 17
         config = response["config"] as? [String: Any] ?? [:]
         logsPath = response["logs"] as? String ?? ""
         windows = Set((response["windows"] as? [String: Any] ?? [:]).keys).union(surfaceWindows.keys)
@@ -455,7 +455,7 @@ struct FilesView: View {
 
 struct RuntimeView: View {
     @EnvironmentObject var model: SubsystemModel
-    @CompatibleState<Int> private var android = 16
+    @CompatibleState<Int> private var android = 17
     @CompatibleState<Int> private var memory = 4096
     @CompatibleState<Int> private var cores = 4
     @CompatibleState<Int> private var fps = 30

@@ -29,7 +29,12 @@ class Android17Tests(unittest.TestCase):
         self.assertNotIn('system-images;android-36;default;arm64-v8a', packages)
         self.assertNotEqual(packages['emulator']['name'], next(e for e in lock16['archives'] if e.get('package') == 'emulator')['name'])
         self.assertTrue(all(HEX.fullmatch(e['sha256']) for e in lock17['archives']))
-        self.assertFalse([e for e in lock17['archives'] if e['relative_path'].startswith('provision/')])   # no Magisk/microG
+        # Root and microG are provisioned on 17 too: Magisk v31.0 is the first release with Zygisk for API 37.
+        magisk = next(e for e in lock17['archives'] if e.get('kind') == 'magisk')
+        self.assertEqual(magisk['name'], 'Magisk-v31.0.apk')
+        for kind in ('microg_services', 'microg_companion', 'vector'):
+            self.assertEqual(next(e for e in lock17['archives'] if e.get('kind') == kind),
+                             next(e for e in lock16['archives'] if e.get('kind') == kind))
         shared = [e for e in lock16['archives'] if e['relative_path'] in {x['relative_path'] for x in lock17['archives']}]
         self.assertTrue(all(e in lock17['archives'] for e in shared))   # reused archives are pinned identically
 
@@ -42,9 +47,19 @@ class Android17Tests(unittest.TestCase):
                                   'system-images;android-37.0;default;arm64-v8a': 'system-images/android-37.0/default/arm64-v8a'}.items():
             self.assertEqual(installer.package_destination(sdk, package), sdk / expected)
 
+    def test_provisioning_picks_the_lock_for_the_android_version(self):
+        core = load('magisk_provision', 'scripts/provision-mac.py')
+        self.assertEqual(core.lock_file(16).name, 'runtime-lock.json')
+        self.assertEqual(core.lock_file(17).name, 'runtime-lock-17.json')
+        self.assertTrue(core.lock_file(17).is_file())
+
+    def test_new_installs_default_to_android_17(self):
+        self.assertEqual(subsystem.DEFAULTS['android'], 17)
+
     def test_controller_looks_for_the_android_17_image_in_android_37_0(self):
         with tempfile.TemporaryDirectory() as folder:
             controller = subsystem.Controller(Path(folder))
+            controller.config['android'] = 16
             self.assertEqual(controller.image_api, '36')
             controller.config['android'] = 17
             self.assertEqual((controller.api, controller.image_api), (37, '37.0'))

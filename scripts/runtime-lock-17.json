@@ -89,6 +89,45 @@
       "kind": "python",
       "size": 25165569,
       "relative_path": "mac-tools/cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz"
+    },
+    {
+      "name": "Magisk-v31.0.apk",
+      "url": "https://github.com/topjohnwu/Magisk/releases/download/v31.0/Magisk-v31.0.apk",
+      "sha256": "2c8a488b9a5293e578e95ae4f07e3c57aba4feec4a52ca4dd852a2692d6dd4e8",
+      "size": 11248935,
+      "kind": "magisk",
+      "relative_path": "provision/Magisk-v31.0.apk"
+    },
+    {
+      "kind": "microg_services",
+      "name": "com.google.android.gms-252432034.apk",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.17.252432/com.google.android.gms-252432034.apk",
+      "size": 108113833,
+      "sha256": "e5e6cba078bdec812b5450599350e5c1a12c8b7438da5bf77123af170f8c1a35",
+      "relative_path": "provision/com.google.android.gms-252432034.apk",
+      "sha1": "c4a5aac93f37fac1223d95617ad4f43c497e39e2",
+      "app_package": "com.google.android.gms",
+      "signer_sha256": "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+    },
+    {
+      "kind": "microg_companion",
+      "name": "com.android.vending-84022634.apk",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.17.252432/com.android.vending-84022634.apk",
+      "size": 4210169,
+      "sha256": "9b8616011cc8f026bcbbe094df850794abb9d6d9f23214d7a8f8c4d1033ea012",
+      "relative_path": "provision/com.android.vending-84022634.apk",
+      "sha1": "019558ff829f42af94846c23b48bec49bb503abb",
+      "app_package": "com.android.vending",
+      "signer_sha256": "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+    },
+    {
+      "kind": "vector",
+      "name": "Vector-v2.2-3080-Release.zip",
+      "url": "https://github.com/JingMatrix/Vector/releases/download/v2.2/Vector-v2.2-3080-Release.zip",
+      "size": 9316843,
+      "sha256": "9ee8323575d615f7b3f1076ff60b2a63a49390ef11881b52632311a37f6f79cc",
+      "relative_path": "provision/Vector-v2.2-3080-Release.zip",
+      "sha1": "dec58ca31ce381d1da0b4bf4953835ea5ac9dcfd"
     }
   ]
 }

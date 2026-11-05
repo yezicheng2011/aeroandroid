@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install pinned microG into this project's pure AOSP Android 16 AVD.
+"""Install pinned microG into this project's pure AOSP Android 16 or 17 AVD.
 
 No Google proprietary payload, account login, device registration, or push opt-in
 is performed. Package installation, framework configuration, and actual signature
@@ -38,8 +38,8 @@ HEX256 = re.compile(r'[0-9a-fA-F]{64}\Z')
 
 
 def require_aosp(controller):
-    if controller.config['android'] != 16 or controller.image_tag != 'default':
-        raise RuntimeError('microG requires the separate pure AOSP Android 16 default image; migrate first')
+    if controller.config['android'] not in (16, 17) or controller.image_tag != 'default':
+        raise RuntimeError('microG requires the separate pure AOSP Android 16 or 17 default image; migrate first')
 
 
 def parse_apk_permissions(output):
@@ -115,7 +115,7 @@ def pinned_path(base, relative):
 
 
 def load_assets(cache, controller):
-    lock = json.loads((PROJECT / 'scripts/runtime-lock.json').read_text())
+    lock = json.loads(core.lock_file(controller.config['android']).read_text())
     entries = {entry['kind']: entry for entry in lock['archives']
                if entry.get('kind') in {*APK_KINDS, 'vector'}}
     if set(entries) != {*APK_KINDS, 'vector'}:
@@ -154,9 +154,9 @@ def load_assets(cache, controller):
     return apks, vector
 
 
-def expected_signers():
+def expected_signers(controller):
     """Verification does not require keeping the downloaded APK archives."""
-    lock = json.loads((PROJECT / 'scripts/runtime-lock.json').read_text())
+    lock = json.loads(core.lock_file(controller.config['android']).read_text())
     local = json.loads((PROJECT / 'artifacts/microg-tools.json').read_text())
     result = {}
     for kind, package in APK_KINDS.items():
@@ -193,7 +193,7 @@ def make_module(apks, privileged, target):
             archive.write(asset['path'], f'system/priv-app/{directory}/{directory}.apk')
         archive.writestr('system/etc/permissions/privapp-permissions-mac-microg.xml',
                          ET.tostring(permissions, encoding='utf-8', xml_declaration=True))
-        archive.writestr('module.prop', f'id={MODULE_ID}\nname=Mac Android 16 microG\nversion=0.1\n'
+        archive.writestr('module.prop', f'id={MODULE_ID}\nname=Mac Android microG\nversion=0.1\n'
                          'versionCode=1\nauthor=Android Subsystem\n'
                          'description=Open-source microG Services, Companion, and GSFProxy for the private AOSP runtime\n')
         archive.writestr('customize.sh', 'SKIPUNZIP=0\nset_perm_recursive "$MODPATH/system" 0 0 0755 0644\n')
@@ -323,7 +323,7 @@ def signature_probe(controller):
 
 def verify(controller, apks=None):
     require_aosp(controller)
-    apks = expected_signers() if apks is None else apks
+    apks = expected_signers(controller) if apks is None else apks
     magisk_report = core.verify(controller)
     core.adb_root(controller)
     try:
@@ -337,7 +337,7 @@ def verify(controller, apks=None):
             if not installed:
                 raise RuntimeError(f'Missing installed microG package: {package}')
             packages[package] = installed
-        report = {'android': 16, 'api': 36, 'image_tag': controller.image_tag,
+        report = {'android': controller.config['android'], 'api': controller.api, 'image_tag': controller.image_tag,
                   'magisk': magisk_report['magisk'], 'installed': packages,
                   'modules_verified': modules, 'signature_checked': False,
                   'signature_check': {'status': 'not_run'}, 'm5_self_check_required': True,

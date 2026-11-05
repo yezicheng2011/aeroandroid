@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Provision this project's AVD with persistent Magisk.
 
-The patched boot image is private to this runtime. Real API 36 ARM64 boot and
+The patched boot image is private to this runtime. Real ARM64 boot (API 36 or 37) and
 Magisk behavior must be accepted on the user's Mac.
 """
 from __future__ import annotations
@@ -18,6 +18,11 @@ import zipfile
 PROJECT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('subsystem', PROJECT / 'backend/subsystem.py')
 subsystem = importlib.util.module_from_spec(spec); spec.loader.exec_module(subsystem)
+
+
+def lock_file(android):
+    """The pinned runtime for an Android version: runtime-lock.json (16), runtime-lock-17.json (17)."""
+    return PROJECT / ('scripts/runtime-lock.json' if android == 16 else f'scripts/runtime-lock-{android}.json')
 
 
 def digest(path):
@@ -78,8 +83,8 @@ def verify(controller):
 
 def provision(cache, root=None):
     c = subsystem.Controller(root)
-    if c.config['android'] != 16: raise RuntimeError('This pinned Magisk profile supports Android 16 only')
-    lock = json.loads((PROJECT / 'scripts/runtime-lock.json').read_text())
+    if c.config['android'] not in (16, 17): raise RuntimeError('This pinned Magisk profile supports Android 16 and 17 only')
+    lock = json.loads(lock_file(c.config['android']).read_text())
     assets = {}
     for entry in lock['archives']:
         if entry.get('kind') == 'magisk':
@@ -92,11 +97,11 @@ def provision(cache, root=None):
     adb_root(c)
     patch_script = PROJECT / 'third_party/Magisk/host_patch.sh'
     if not patch_script.exists(): raise RuntimeError('Missing pinned upstream Magisk patch source')
-    ramdisk = c.sdk / f'system-images/android-36/{c.image_tag}/arm64-v8a/ramdisk.img'
-    if not ramdisk.is_file(): raise RuntimeError('Android 16 ARM64 ramdisk is missing')
+    ramdisk = c.sdk / f'system-images/android-{c.image_api}/{c.image_tag}/arm64-v8a/ramdisk.img'
+    if not ramdisk.is_file(): raise RuntimeError(f"Android {c.config['android']} ARM64 ramdisk is missing")
     with zipfile.ZipFile(assets['magisk']) as apk:
         busybox = workspace / 'busybox'; busybox.write_bytes(apk.read('lib/arm64-v8a/libbusybox.so'))
-    print('修补私有 ramdisk：Magisk v30.7 / Android 16 ARM64', flush=True)
+    print(f"修补私有 ramdisk：{assets['magisk'].name} / Android {c.config['android']} ARM64", flush=True)
     c.adb('push', str(busybox), '/data/local/tmp/busybox')
     c.adb('push', str(assets['magisk']), '/data/local/tmp/magisk.apk', timeout=120)
     c.adb('push', str(patch_script), '/data/local/tmp/mac_magisk_patch.sh')
@@ -108,7 +113,7 @@ def provision(cache, root=None):
     if patched.stat().st_size < 65536: raise RuntimeError('Patched ramdisk is unexpectedly small')
     c.adb('install', '-r', str(assets['magisk']), timeout=120)
     c.stop()
-    descriptor = {'android': 16, 'api': 36, 'image_tag': c.image_tag,
+    descriptor = {'android': c.config['android'], 'api': c.api, 'image_tag': c.image_tag,
                   'sha256': digest(patched), 'magisk_apk_sha256': digest(assets['magisk']),
                   'source_ramdisk_sha256': digest(ramdisk)}
     subsystem.atomic_json(image_dir / 'ramdisk.json', descriptor)

@@ -33,6 +33,9 @@ class IntegrationTests(unittest.TestCase):
         self.environment.start()
         self.mac = patch.object(subsystem.platform, 'system', return_value='Darwin'); self.mac.start()
         self.arm = patch.object(subsystem.platform, 'machine', return_value='arm64'); self.arm.start()
+        # The fixture SDK only has the Android 16 image; the product default is Android 17.
+        (self.root / 'state').mkdir()
+        subsystem.atomic_json(self.root / 'state/config.json', {'android': 16, 'image_tag': 'default'})
         self.controller = subsystem.Controller(self.root / 'state')
         actual_tool = self.controller.tool
         self.controller.tool = lambda name: str(scrcpy) if name == 'scrcpy' else actual_tool(name)
