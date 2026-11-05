@@ -1,4 +1,4 @@
-aeroandroid 0.2.1 · 安卓子系统（Android Subsystem for Apple Silicon and Intel Macs）
+aeroandroid 0.3.0 · 安卓子系统（Android Subsystem for Apple Silicon and Intel Macs）
 轻量版 DMG：管理程序 + 安装脚本 + 源码。安卓运行环境（约 1.8 GB）在安装时从官方源下载并逐个校验 SHA-256。
 
 要求：Apple 芯片或 Intel Mac（Intel 需 2018 年及以后机型），macOS 14+，Xcode 命令行工具（xcode-select --install），至少 20 GB 空闲空间。
@@ -6,7 +6,7 @@ aeroandroid 0.2.1 · 安卓子系统（Android Subsystem for Apple Silicon and I
 【安装步骤】
 1. 右键（或按住 Control 点按）「安装 aeroandroid.command」→ 选「打开」→ 再点「打开」。
    macOS 15 若提示「未打开」：系统设置 → 隐私与安全性 → 最下方点「仍要打开」。
-   也可以在「终端」里运行：bash "/Volumes/aeroandroid 0.2.1/安装 aeroandroid.command"
+   也可以在「终端」里运行：bash "/Volumes/aeroandroid 0.3.0/安装 aeroandroid.command"
 2. 脚本把源码复制到 ~/aeroandroid（DMG 是只读的），然后运行 build.sh：下载运行环境 → 编译 → 安装。
    中国大陆可在提示时输入 y 使用国内镜像（等同 ./build.sh --mirror cn）。
    过程中需要阅读并接受 Android SDK 许可协议。中断后重新运行会续传，已校验的文件不会重下。

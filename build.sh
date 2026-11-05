@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # aeroandroid self-build: one command to check prerequisites, download the
 # pinned runtime (SHA-256 verified) into ./runtime-cache and run the installer.
-# Copyright 2026 daniel.ye — Apache-2.0
+# Copyright 2026 daniel.ye叶子诚 — Apache-2.0
 set -euo pipefail
 
 project_root="$(cd "$(dirname "$0")" && pwd)"

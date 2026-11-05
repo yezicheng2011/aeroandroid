@@ -26,8 +26,9 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>安卓子系统</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.1</string>
+<key>CFBundleShortVersionString</key><string>0.3.0</string>
 <key>CFBundleVersion</key><string>1</string>
+<key>NSHumanReadableCopyright</key><string>Copyright © 2026 daniel.ye叶子诚</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSCameraUsageDescription</key><string>Android apps in the subsystem use the Mac camera when you open a camera app.</string>
 <key>NSHighResolutionCapable</key><true/>
@@ -55,8 +56,9 @@ cat > "$helper/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.1</string>
+<key>CFBundleShortVersionString</key><string>0.3.0</string>
 <key>CFBundleVersion</key><string>1</string>
+<key>NSHumanReadableCopyright</key><string>Copyright © 2026 daniel.ye叶子诚</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSCameraUsageDescription</key><string>Android apps in the subsystem use the Mac camera when you open a camera app.</string>

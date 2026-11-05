@@ -124,6 +124,6 @@ produced by the build scripts.
 
 ## License
 
-Apache-2.0, Copyright 2026 daniel.ye. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for third-party components,
+Apache-2.0, Copyright 2026 daniel.ye叶子诚. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for third-party components,
 and [`docs/LICENSING.md`](docs/LICENSING.md) for what you must do if you redistribute a build that contains them
 (the Android SDK components and the GPL parts are downloaded onto your Mac, not shipped by this project).
