@@ -1,7 +1,7 @@
 import Foundation
 
 enum UiLangPref: String, CaseIterable, Identifiable {
-    case system, zh, en
+    case en, zh
     var id: String { rawValue }
 }
 
@@ -9,12 +9,13 @@ enum ResolvedLang: String {
     case zh, en
 }
 
-/// Lightweight zh/en catalogs for the Mac management UI. Preference is remembered in UserDefaults.
+/// English and Chinese catalogs for the Mac app. English is the default whatever the system language is;
+/// Chinese is used only when it is chosen in Settings, and any string missing from it falls back to English.
 enum L10n {
     static let defaultsKey = "uiLang"
 
     static func preference() -> UiLangPref {
-        UiLangPref(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "system") ?? .system
+        UiLangPref(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .en   // an old "system" choice also lands here
     }
 
     static func setPreference(_ value: UiLangPref) {
@@ -22,21 +23,13 @@ enum L10n {
     }
 
     static func resolved() -> ResolvedLang {
-        switch preference() {
-        case .zh: return .zh
-        case .en: return .en
-        case .system:
-            let langs = Locale.preferredLanguages.map { $0.lowercased() }
-            if langs.contains(where: { $0.hasPrefix("zh") }) { return .zh }
-            if langs.contains(where: { $0.hasPrefix("en") }) { return .en }
-            return .zh
-        }
+        preference() == .zh ? .zh : .en
     }
 
     /// Look up `key` and replace `{0}`, `{1}`, … with `args`.
     static func t(_ key: String, _ args: CVarArg...) -> String {
-        let pack = messages[resolved()] ?? messages[.zh]!
-        var text = pack[key] ?? messages[.zh]![key] ?? key
+        let pack = messages[resolved()] ?? messages[.en]!
+        var text = pack[key] ?? messages[.en]![key] ?? key
         for (index, arg) in args.enumerated() {
             text = text.replacingOccurrences(of: "{\(index)}", with: "\(arg)")
         }
@@ -74,6 +67,7 @@ enum L10n {
         "app.starting": "正在打开 {0}…",
         "err.backend.shutdown_unconfirmed": "安卓端口仍在使用，尚未确认旧子系统退出。请先停止子系统，再修改内存或重新启动。",
         "err.backend.no_free_port": "找不到可用的安卓端口对（5554–5681）。请关闭不需要的模拟器后重试。",
+        "err.backend.runtime_upgrade_needed": "这台 Mac 仍是旧的 Google 镜像安装，尚未安装当前的 Android 运行环境。请运行一次安装程序升级（打开 DMG，运行「Install aeroandroid」）。旧的应用和数据会保留为备份。",
         "intel.title": "这台 Mac 使用 Intel 处理器",
         "intel.body": "这里的安卓以 x86_64 运行。很多安卓应用，尤其是大多数 3D 游戏，只包含 arm64 代码，需要「ARM 翻译」才能运行。完整版安装会自动加入 ARM 翻译（比原生慢）；如果安装时选了 --pure 或 --no-arm-translation，这些应用会无法安装（提示「没有匹配的 CPU 架构」）。纯 Java/Kotlin 应用和带有 x86_64 代码的应用不受影响。设置 → 检查运行环境 可查看当前支持的 CPU 类型。",
         "install.working": "正在安装应用…",
@@ -151,8 +145,7 @@ enum L10n {
         "settings.open_logs": "打开日志文件夹",
         "settings.check_fallback": "检查",
         "settings.language": "界面语言",
-        "settings.language_hint": "跟随系统时，中文系统保持中文；选择会被记住。",
-        "settings.lang.system": "跟随系统",
+        "settings.language_hint": "默认使用英文。你的选择会被记住。",
         "settings.lang.zh": "中文",
         "settings.lang.en": "English",
         "gfx.connecting": "正在连接安卓应用…",
@@ -208,6 +201,7 @@ enum L10n {
         "app.starting": "Opening {0}…",
         "err.backend.shutdown_unconfirmed": "The Android ports are still in use and the previous subsystem has not confirmed it exited. Stop the subsystem first, then change memory or start again.",
         "err.backend.no_free_port": "No free Android port pair (5554-5681). Close emulators you do not need and try again.",
+        "err.backend.runtime_upgrade_needed": "This Mac still has the old Google-image setup, and the current Android runtime is not installed yet. Run the installer once to upgrade (open the DMG and run \"Install aeroandroid\"). Your old apps and data are kept as a backup.",
         "intel.title": "This Mac has an Intel processor",
         "intel.body": "Android runs here as x86_64. Many Android apps, especially most 3D games, ship only arm64 code and need ARM translation to run. The full install adds ARM translation automatically (it is slower than native); if you chose --pure or --no-arm-translation, those apps will not install (you will see \"no matching CPU types\"). Apps written in plain Java/Kotlin, and apps with x86_64 code, are not affected. Settings → Check runtime environment shows the CPU types this system supports.",
         "install.working": "Installing app…",
@@ -285,8 +279,7 @@ enum L10n {
         "settings.open_logs": "Open logs folder",
         "settings.check_fallback": "Check",
         "settings.language": "Language",
-        "settings.language_hint": "Follow System keeps Chinese on a Chinese OS. Your choice is remembered.",
-        "settings.lang.system": "Follow System",
+        "settings.language_hint": "The app is in English by default. Your choice is remembered.",
         "settings.lang.zh": "中文",
         "settings.lang.en": "English",
         "gfx.connecting": "Connecting to Android app…",

@@ -85,6 +85,11 @@ def icns_from_png(png):
     return b"icns" + (len(entry) + 8).to_bytes(4, "big") + entry
 
 
+def image_folder(android):
+    """SDK folder name of the system image for an Android version; Android 17 is published as android-37.0."""
+    return "37.0" if android == 17 else str(android + 20)
+
+
 def read_plist(path):
     """A property list as a dict, or {} when it is missing or unreadable."""
     try:
@@ -163,8 +168,27 @@ class Controller:
 
     @property
     def image_api(self):
-        """SDK folder name of the system image; Android 17 is published as android-37.0."""
-        return "37.0" if self.api == 37 else str(self.api)
+        return image_folder(self.config["android"])
+
+    def migrate_legacy(self):
+        """Move an install from before the AOSP runtime onto the current one.
+
+        Such an install has a config without `image_tag` (and often "android": 16, the old default) plus a
+        device built from Google's old Google APIs image. Its data stays untouched as a backup: the AOSP runtime
+        uses its own device. This switches to the newest AOSP image the installer has put in the SDK, or says
+        plainly that the installer has to run first."""
+        if self.running_emulator() or self.unconfirmed_shutdown():
+            raise SubsystemError("The old Android is still running. Stop it, then start again.", code="shutdown_unconfirmed")
+        for android in (DEFAULTS["android"], 16):
+            if (self.sdk / f"system-images/android-{image_folder(android)}/default/{self.abi}/system.img").is_file():
+                config = {**self.config, "android": android, "image_tag": "default"}
+                config.pop("magisk_ramdisk", None)   # it was patched from the old image
+                atomic_json(self.root / "config.json", config)
+                self.config = config
+                return
+        raise SubsystemError("This Mac still has the old Google-image setup, and the current Android runtime is not installed yet. "
+                             "Run the installer once to upgrade (open the DMG and run \"Install aeroandroid\"). "
+                             "Your old apps and data are kept as a backup.", code="runtime_upgrade_needed")
 
     def loaded_config(self, saved):
         config = {**DEFAULTS, **saved}
@@ -343,7 +367,8 @@ class Controller:
                 raise SubsystemError("Stop Android before changing runtime settings")
             candidate = {**self.config, **changes}
             if candidate["image_tag"] != "default":
-                raise SubsystemError("New runtime settings require the AOSP image; migrate with image_tag=default")
+                self.migrate_legacy()
+                candidate = {**self.config, **changes}
             if candidate["android"] != self.config["android"] or candidate["image_tag"] != self.image_tag:
                 candidate.pop("magisk_ramdisk", None)
             self.validate_config(candidate)
@@ -357,7 +382,7 @@ class Controller:
     def create(self):
         with self.locked():
             if self.image_tag != "default":
-                raise SubsystemError("Legacy Google image is retained only for migration; select the AOSP runtime")
+                self.migrate_legacy()
             if self.configured():
                 return {"avd": self.avd, "created": False}
             image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
@@ -783,7 +808,7 @@ class Controller:
         shutil.copy2(binary, contents / "MacOS/AndroidSubsystem")
         (contents / "Resources/AppIcon.icns").write_bytes(icon)
         manager = read_plist(app / "Contents/Info.plist")
-        info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.app." + package,
+        info = {"CFBundleDevelopmentRegion": "en", "CFBundleIdentifier": "dev.dan.androidsubsystem.app." + package,
                 "CFBundleName": label, "CFBundleDisplayName": label, "CFBundleIconFile": "AppIcon",
                 "CFBundleExecutable": "AndroidSubsystem", "CFBundlePackageType": "APPL",
                 "CFBundleShortVersionString": manager.get("CFBundleShortVersionString", "1"),

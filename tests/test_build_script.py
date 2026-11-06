@@ -80,6 +80,8 @@ class PackagingTests(unittest.TestCase):
             info = plistlib.loads(rendered.encode())
             self.assertEqual((info['CFBundleShortVersionString'], info['CFBundleVersion']), (version, version))
             self.assertEqual(info['NSHumanReadableCopyright'], copyright_line)
+            self.assertEqual(info['CFBundleDevelopmentRegion'], 'en')      # macOS's own menus and dialogs follow it
+            self.assertNotRegex(info.get('CFBundleDisplayName', ''), r'[\u3000-\u9fff]')   # the Dock and Finder name is English
         self.assertRegex(version, r'^\d+\.\d+\.\d+$')
         self.assertEqual(len(re.findall(r'<string>\d+\.\d+\.\d+</string>', script)), 0)   # no second hard-coded version
 
