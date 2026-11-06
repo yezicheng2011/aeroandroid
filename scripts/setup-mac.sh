@@ -2,7 +2,7 @@
 # Online developer setup. Prefer cached SDK archives via setup-offline-mac.py when available.
 set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${1:-16}"
+version="${1:-17}"
 [[ "$version" == 16 || "$version" == 17 ]] || { echo 'Choose Android 16 or 17.' >&2; exit 1; }
 [[ "$(uname -s)" == Darwin ]] || { echo 'Requires a Mac.' >&2; exit 1; }
 command -v brew >/dev/null || { echo 'Install Homebrew from https://brew.sh, then run this script again.' >&2; exit 1; }

@@ -3,6 +3,7 @@ import json
 import os
 import plistlib
 from pathlib import Path
+import shutil
 import signal
 import socket
 import subprocess
@@ -351,6 +352,7 @@ class IntegrationTests(unittest.TestCase):
         launcher = Path(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'])
         info = plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())
         self.assertEqual((info['CFBundleShortVersionString'], info['NSHumanReadableCopyright']), ('0.3.0', 'Copyright test'))
+        self.assertEqual(info['CFBundleDevelopmentRegion'], 'en')
         self.assertEqual(self.controller.refresh_launchers(str(app), str(apps)), {'refreshed': []})   # already current
         # An unrelated app and a launcher made by a different manager are never touched.
         other = apps / 'Other.app/Contents'; other.mkdir(parents=True)
@@ -445,21 +447,60 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(waiting.config['port'], port)
         self.assertEqual(subsystem.Controller(self.controller.root).config['port'], port)
 
-    def test_legacy_google_configuration_isolated_from_new_aosp_data(self):
+    def legacy_install(self, **extra):
+        """What an install from before the AOSP runtime leaves behind: no image_tag, an old Google-image device."""
         legacy = self.controller.avd_home / 'MacAndroid_16_arm64.ini'
         legacy.write_text('path=preserved-old-data')
         subsystem.atomic_json(self.controller.root / 'config.json', {'android': 16, 'memory_mb': 6144,
-                              'magisk_ramdisk': '/legacy/ramdisk.img'})
+                              'magisk_ramdisk': '/legacy/ramdisk.img', **extra})
         controller = subsystem.Controller(self.controller.root)
-        self.assertEqual(controller.image_tag, 'google_apis')
-        self.assertEqual(controller.avd, 'MacAndroid_16_arm64')
-        with self.assertRaisesRegex(subsystem.SubsystemError, 'Legacy Google'):
+        self.assertEqual((controller.image_tag, controller.avd), ('google_apis', 'MacAndroid_16_arm64'))
+        return legacy, controller
+
+    def test_legacy_install_moves_to_the_installed_aosp_runtime_and_keeps_its_data(self):
+        legacy, controller = self.legacy_install()
+        controller.boot()                              # used to fail: "Legacy Google image is retained only for migration"
+        self.assertEqual((controller.image_tag, controller.avd, controller.config['android']), ('default', 'MacAndroid_16_AOSP_arm64', 16))
+        self.assertEqual(controller.config['memory_mb'], 6144)          # their settings survive
+        self.assertNotIn('magisk_ramdisk', controller.config)           # it was patched from the old image
+        saved = json.loads((controller.root / 'config.json').read_text())
+        self.assertEqual(saved['image_tag'], 'default')
+        self.assertEqual(legacy.read_text(), 'path=preserved-old-data')  # the old device is a backup, untouched
+        controller.stop()
+
+    def test_legacy_install_prefers_android_17_when_that_runtime_is_installed(self):
+        image = self.sdk / 'system-images/android-37.0/default/arm64-v8a/system.img'
+        image.parent.mkdir(parents=True); image.touch()
+        _legacy, controller = self.legacy_install()
+        controller.create()
+        self.assertEqual((controller.config['android'], controller.image_api), (17, '37.0'))
+
+    def test_legacy_install_without_the_new_runtime_says_what_to_do(self):
+        shutil.rmtree(self.sdk / 'system-images')
+        _legacy, controller = self.legacy_install()
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'Run the installer once') as caught:
             controller.boot()
+        self.assertEqual(caught.exception.code, 'runtime_upgrade_needed')
+        self.assertEqual(controller.image_tag, 'google_apis')           # nothing was changed
+
+    def test_legacy_install_is_not_switched_while_its_android_is_running(self):
+        _legacy, controller = self.legacy_install()
+        with patch.object(controller, 'running_emulator', return_value=True):
+            with self.assertRaises(subsystem.SubsystemError) as caught:
+                controller.boot()
+        self.assertEqual(caught.exception.code, 'shutdown_unconfirmed')
+        self.assertEqual(controller.image_tag, 'google_apis')
+
+    def test_saving_settings_on_a_legacy_install_migrates_it_too(self):
+        _legacy, controller = self.legacy_install()
+        controller.configure({'memory_mb': 8192})
+        self.assertEqual((controller.image_tag, controller.config['memory_mb']), ('default', 8192))
+
+    def test_the_manual_migration_still_works(self):
+        _legacy, controller = self.legacy_install()
         controller.configure({'image_tag': 'default'})
-        self.assertEqual(controller.avd, 'MacAndroid_16_AOSP_arm64')
-        self.assertEqual(controller.config['memory_mb'], 6144)
+        self.assertEqual((controller.avd, controller.config['memory_mb']), ('MacAndroid_16_AOSP_arm64', 6144))
         self.assertNotIn('magisk_ramdisk', controller.config)
-        self.assertEqual(legacy.read_text(), 'path=preserved-old-data')
 
 
 class PortProbeTests(unittest.TestCase):

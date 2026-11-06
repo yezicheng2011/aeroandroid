@@ -24,10 +24,11 @@ render > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleIdentifier</key><string>dev.dan.androidsubsystem</string>
 <key>CFBundleName</key><string>Android Subsystem</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundleDisplayName</key><string>安卓子系统</string>
+<key>CFBundleDisplayName</key><string>Android Subsystem</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>@VERSION@</string>
@@ -55,6 +56,7 @@ render > "$helper/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleIdentifier</key><string>dev.dan.androidsubsystem.installer</string>
 <key>CFBundleName</key><string>APK Installer</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>

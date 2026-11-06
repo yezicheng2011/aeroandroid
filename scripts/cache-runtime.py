@@ -66,7 +66,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('cache', type=Path)
     parser.add_argument('--host', choices=['macosx', 'linux'], default='macosx')
-    parser.add_argument('--android', type=int, choices=[16, 17], default=16)
+    parser.add_argument('--android', type=int, choices=[16, 17], default=17)
     parser.add_argument('--guest-only', action='store_true')
     args = parser.parse_args()
     args.cache.mkdir(parents=True, exist_ok=True)

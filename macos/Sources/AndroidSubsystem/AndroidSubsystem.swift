@@ -142,7 +142,7 @@ final class SubsystemModel: ObservableObject {
         return L10n.t(key, a0, a1)
     }
     func setUiLang(_ raw: String) {
-        let pref = UiLangPref(rawValue: raw) ?? .system
+        let pref = UiLangPref(rawValue: raw) ?? .en
         L10n.setPreference(pref)
         uiLang = pref.rawValue
     }
@@ -476,7 +476,6 @@ struct RuntimeView: View {
                     get: { model.uiLang },
                     set: { model.setUiLang($0) }
                 )) {
-                    Text(model.t("settings.lang.system")).tag(UiLangPref.system.rawValue)
                     Text(model.t("settings.lang.zh")).tag(UiLangPref.zh.rawValue)
                     Text(model.t("settings.lang.en")).tag(UiLangPref.en.rawValue)
                 }
@@ -485,8 +484,8 @@ struct RuntimeView: View {
             }
             Section(model.t("settings.runtime")) {
                 Picker(model.t("settings.android_ver"), selection: $android) {
-                    Text("Android 16 · API 36").tag(16)
                     Text("Android 17 · API 37").tag(17)
+                    Text("Android 16 · API 36").tag(16)
                 }
                 Text(model.t("settings.android_hint"))
                     .font(.caption).foregroundStyle(.secondary)
