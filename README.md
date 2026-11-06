@@ -91,10 +91,10 @@ run them, so the full install adds a translator:
 - Apps translated this way are slower than native ones. Apps with x86_64 code, and the pre-installed Fennec
   (an x86_64 build is chosen automatically), run natively.
 
-**Not run end to end on a Mac.** I checked the pieces against Google's real Android 16 and 17 images and booted
-the result in an emulator: the translator files and the 14 properties were identical to Google's image, root and
-the module installed, and Android listed `arm64-v8a`. The emulator available to me has no hardware acceleration, so an
-arm64 program crashed inside the translator there, exactly as on Google's own image; only a Mac can show it running.
+**Not run end to end on a Mac.** The pieces were checked against Google's real Android 16 and 17 images, and the result was
+booted in an emulator: the translator files and the 14 properties were identical to Google's image, root and the module
+installed, and Android listed `arm64-v8a`. That emulator had no hardware acceleration, so an arm64 program crashed
+inside the translator there, exactly as on Google's own image; only a Mac can show it running.
 On an Intel Mac, the first run prints a notice, and Settings → Check runtime environment lists the CPU types.
 
 ## Restricted networks (for example mainland China)

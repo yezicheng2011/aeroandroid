@@ -1,5 +1,5 @@
 #!/bin/bash
-# aeroandroid 0.3.0 lightweight installer (Apache-2.0, Copyright 2026 daniel.ye叶子诚)
+# aeroandroid lightweight installer (Apache-2.0, Copyright 2026 daniel.ye叶子诚)
 # Copies the source from this disk image to your home folder (the DMG is read-only),
 # then runs build.sh: downloads the pinned runtime (SHA-256 verified), builds and installs
 # ~/Applications/Android Subsystem.app. Extra arguments go to build.sh, e.g. --mirror cn.

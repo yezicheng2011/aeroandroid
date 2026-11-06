@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
+# One place for the version (the VERSION file) and the copyright line; both Info.plists are rendered from them.
+version="$(tr -d '[:space:]' < "$project_root/VERSION")"
+copyright='Copyright © 2026 daniel.ye叶子诚'
+render() { sed -e "s|@VERSION@|$version|g" -e "s|@COPYRIGHT@|$copyright|g"; }
 [[ "$(uname -s)" == Darwin ]] || { echo 'Build on a Mac.' >&2; exit 1; }
 # Local builds target this Mac. AEROANDROID_UNIVERSAL=1 builds arm64 + x86_64 in one binary (releases).
 archs=()
@@ -16,7 +20,7 @@ strip -x "$app/Contents/MacOS/AndroidSubsystem"   # smaller download; the app ha
 cp "$project_root/backend/subsystem.py" "$app/Contents/Resources/backend/"
 cp "$project_root/artifacts/MacBridge.apk" "$app/Contents/Resources/"
 cp "$project_root/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
-cat > "$app/Contents/Info.plist" <<'PLIST'
+render > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -26,9 +30,9 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>安卓子系统</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>NSHumanReadableCopyright</key><string>Copyright © 2026 daniel.ye叶子诚</string>
+<key>CFBundleShortVersionString</key><string>@VERSION@</string>
+<key>CFBundleVersion</key><string>@VERSION@</string>
+<key>NSHumanReadableCopyright</key><string>@COPYRIGHT@</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSCameraUsageDescription</key><string>Android apps in the subsystem use the Mac camera when you open a camera app.</string>
 <key>NSHighResolutionCapable</key><true/>
@@ -47,7 +51,7 @@ helper="$app/Contents/Helpers/APK Installer.app"
 mkdir -p "$helper/Contents/MacOS" "$helper/Contents/Resources"
 cp "$app/Contents/MacOS/AndroidSubsystem" "$helper/Contents/MacOS/AndroidSubsystem"
 cp "$project_root/assets/AppIcon.icns" "$helper/Contents/Resources/AppIcon.icns"
-cat > "$helper/Contents/Info.plist" <<'PLIST'
+render > "$helper/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -56,9 +60,9 @@ cat > "$helper/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>NSHumanReadableCopyright</key><string>Copyright © 2026 daniel.ye叶子诚</string>
+<key>CFBundleShortVersionString</key><string>@VERSION@</string>
+<key>CFBundleVersion</key><string>@VERSION@</string>
+<key>NSHumanReadableCopyright</key><string>@COPYRIGHT@</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSCameraUsageDescription</key><string>Android apps in the subsystem use the Mac camera when you open a camera app.</string>

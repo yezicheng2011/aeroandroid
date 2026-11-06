@@ -1,0 +1,55 @@
+name: CI
+# Runs on every pull request and push to main, so a broken build.sh or a failing test is caught
+# before a release, not by a user. (release.yml only runs on tags.)
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools the image tests need (mke2fs builds a real ext4 image)
+        run: sudo apt-get install -y --no-install-recommends e2fsprogs
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -p "test_*.py" -v
+
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax (bash -n)
+        run: |
+          find . -path ./.git -prune -o \( -name '*.sh' -o -name '*.command' \) -type f -print0 \
+            | while IFS= read -r -d '' f; do echo "bash -n $f"; bash -n "$f"; done
+      - name: shellcheck (warnings and errors fail the build)
+        run: |
+          find . -path ./.git -prune -o \( -name '*.sh' -o -name '*.command' \) -type f -print0 \
+            | xargs -0 shellcheck --severity=warning -s bash
+
+  macos:
+    name: macOS build
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 16 (the sources need a Swift 6 compiler in Swift 5 language mode)
+        run: |
+          xc="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xc/Contents/Developer"
+          swift --version
+      - name: build.sh runs for real (a syntax check alone missed an unbound variable)
+        run: |
+          bash build.sh --help > /dev/null
+          bash build.sh --check
+          bash build.sh --android 16 --pure --check
+      - name: Swift app builds for Apple Silicon and Intel
+        run: cd macos && swift build -c release --arch arm64 --arch x86_64

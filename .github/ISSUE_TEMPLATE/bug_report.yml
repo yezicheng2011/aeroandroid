@@ -1,0 +1,26 @@
+name: Bug report
+description: Something does not work
+body:
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS
+      description: Apple Silicon or Intel, and the macOS version
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: aeroandroid version and Android version
+      description: For example 0.3.0 with Android 17, and how you installed it
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Paste the relevant part of the install or app log, or the output of scripts/collect-diagnostics.py. Remove anything private.
+      render: text

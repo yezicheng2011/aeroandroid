@@ -11,9 +11,9 @@
 
 ### One command
 ```bash
-./build.sh                 # auto-pick mirror, build and install the pure-AOSP edition
+./build.sh                 # auto-pick mirror, build and install the full edition (Magisk + microG), Android 17
 ./build.sh --mirror cn     # mainland China: GitHub via proxy, Android SDK via Tencent mirror
-./build.sh --with-gpl      # full edition: also fetch GPL-3.0 parts, install Magisk + microG
+./build.sh --pure          # AOSP only: no Magisk, no microG, no GPL-3.0 parts (--with-gpl is accepted as an alias of the default)
 ./build.sh --android 16    # Android 16 instead of the default Android 17 (API 37)
 ./build.sh --no-arm-translation   # Intel Macs: skip ARM translation (saves a 2 GB download and 8 GB of disk)
 ./build.sh --check         # prerequisites only
@@ -21,10 +21,10 @@
 ```
 Environment: `GH_MIRROR` (default `https://gh-proxy.com/`), `SDK_MIRROR` (default `https://mirrors.cloud.tencent.com/AndroidSDK/`), `ANDROID_SUBSYSTEM_CACHE`. Mirrors only change where bytes come from; every file is still checked against its pinned SHA-256, and the official URL is used as a fallback.
 
-Flow: check prerequisites → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, plus the microG parts with `--with-gpl`) → run `Install.command`, which builds the Mac app and installs. Then open `dist/Android Subsystem.app` and run `Graphics-Acceptance.command`.
+Flow: check prerequisites → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, plus the microG parts unless you pass `--pure`) → run `Install.command`, which builds the Mac app and installs. Then open `dist/Android Subsystem.app` and run `Graphics-Acceptance.command`.
 
 ### GPL components
-This repository is Apache-2.0. The microG signature module (`microg-spoof/`, derived from FakeGApps) and Magisk's `host_patch.sh` are GPL-3.0 and are not included. Only with `--with-gpl` does `build.sh` download them from upstream (SHA-256 checked) and print a license notice; they remain GPL-3.0 and must not be redistributed as Apache-2.0. Without the flag you get the pure-AOSP graphics edition, without Magisk or microG.
+This repository is Apache-2.0. The microG signature module (`microg-spoof/`, derived from FakeGApps) and Magisk's `host_patch.sh` are GPL-3.0 and are not included. The default (full) build downloads them from upstream onto your Mac (SHA-256 checked) and prints a license notice; they remain GPL-3.0 and must not be redistributed as Apache-2.0. With `--pure` they are not downloaded and you get the pure-AOSP edition, without Magisk or microG. See `docs/LICENSING.md`.
 
 ### Troubleshooting
 - **"Requires a Mac"**: only macOS is supported, on Apple Silicon or Intel; not Linux or Windows.

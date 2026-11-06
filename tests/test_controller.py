@@ -121,6 +121,51 @@ class IntegrationTests(unittest.TestCase):
             self.controller.install([str(apk)])
         self.controller.stop()
 
+    def test_launchers_take_the_managers_version_and_follow_its_updates(self):
+        passthrough = subprocess.run
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0, '', '')
+                                                    if argv[0].startswith('/usr/bin/') else passthrough(argv, **kw))
+        app = self.root / 'Android Subsystem.app'
+        (app / 'Contents/MacOS').mkdir(parents=True)
+        binary = app / 'Contents/MacOS/AndroidSubsystem'; binary.write_bytes(b'binary v1')
+        def stamp(version):
+            (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleShortVersionString': version,
+                'CFBundleVersion': version, 'NSHumanReadableCopyright': 'Copyright test'}))
+        stamp('0.3.0')
+        apk = self.root / 'fixture.apk'; apk.write_bytes(b'test')
+        apps = self.root / 'Applications'
+        launcher = Path(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'])
+        info = plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())
+        self.assertEqual((info['CFBundleShortVersionString'], info['NSHumanReadableCopyright']), ('0.3.0', 'Copyright test'))
+        self.assertEqual(self.controller.refresh_launchers(str(app), str(apps)), {'refreshed': []})   # already current
+        # An unrelated app and a launcher made by a different manager are never touched.
+        other = apps / 'Other.app/Contents'; other.mkdir(parents=True)
+        (other / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': 'x'}))
+        elsewhere = apps / 'Foreign.app/Contents/MacOS'; elsewhere.mkdir(parents=True)
+        (elsewhere / 'AndroidSubsystem').write_bytes(b'foreign')
+        (apps / 'Foreign.app/Contents/Info.plist').write_bytes(plistlib.dumps({
+            'AndroidPackage': 'com.example.x', 'SubsystemAppPath': '/somewhere/else.app', 'CFBundleShortVersionString': '0.0.1'}))
+        binary.write_bytes(b'binary v2'); stamp('0.4.0')
+        self.assertEqual(self.controller.refresh_launchers(str(app), str(apps)), {'refreshed': [launcher.name]})
+        self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'binary v2')
+        self.assertEqual(plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())['CFBundleShortVersionString'], '0.4.0')
+        self.assertEqual((elsewhere / 'AndroidSubsystem').read_bytes(), b'foreign')
+        self.assertFalse((launcher / 'Contents/MacOS/.AndroidSubsystem.new').exists())
+        self.assertEqual(self.controller.refresh_launchers(str(app), str(apps)), {'refreshed': []})
+        self.controller.stop()
+
+    def test_boot_wait_is_adjustable_and_longer_off_apple_silicon(self):
+        controller = subsystem.Controller(self.root / 'state')
+        self.assertEqual(controller.boot_timeout, 240 if controller.arch == 'arm64' else 480)
+        with patch.dict(os.environ, {'ANDROID_SUBSYSTEM_BOOT_TIMEOUT': '90'}):
+            self.assertEqual(subsystem.Controller(self.root / 'state').boot_timeout, 90)
+
+    def test_a_process_that_dies_just_after_starting_is_reported(self):
+        script = self.root / 'dies-soon'
+        script.write_text('#!/bin/sh\nsleep 0.5\necho "bad option" >&2\nexit 3\n'); script.chmod(0o755)
+        with self.assertRaisesRegex(subsystem.SubsystemError, r'Runtime exited \(3\)'):
+            self.controller.spawn([str(script)], 'dies.log')
+
     def test_gpu_mode_is_configurable_and_validated_and_fps_reaches_60(self):
         self.controller.boot()
         args = json.loads((self.root / 'emulator-argv.json').read_text())
@@ -149,7 +194,18 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(args[args.index('-camera-front') + 1], 'webcam0')
         self.controller.stop()
 
+    def bridge_bundle(self):
+        """A fake app bundle holding MacBridge.apk, so the tests do not need a built guest APK."""
+        bundle = self.root / 'bridge bundle'
+        (bundle / 'backend').mkdir(parents=True, exist_ok=True)
+        (bundle / 'MacBridge.apk').write_bytes(b'bridge')
+        return patch.object(subsystem, '__file__', str(bundle / 'backend/subsystem.py'))
+
     def test_native_bridge_reuses_authenticated_service_and_cleans_forward(self):
+        with self.bridge_bundle():
+            self.check_native_bridge_reuse()
+
+    def check_native_bridge_reuse(self):
         first = self.controller.native_session('com.example.first')
         second = self.controller.native_session('com.example.second')
         self.assertEqual(first['port'], second['port'])
@@ -194,6 +250,10 @@ class IntegrationTests(unittest.TestCase):
         self.controller.stop()
 
     def test_native_bridge_restarts_legacy_record_missing_apk_digest(self):
+        with self.bridge_bundle():
+            self.check_legacy_record_restart()
+
+    def check_legacy_record_restart(self):
         first = self.controller.native_session('com.example.first')
         old = subsystem.read_json(self.controller.root / 'graphics.json', {})
         old.pop('bridge_sha256')
@@ -279,6 +339,7 @@ class IntegrationTests(unittest.TestCase):
             port = next(p for p in range(5554, 5681, 2) if self.controller.ports_available(p))
             self.controller.configure({'port': port, 'memory_mb': 8192})
             with socket.socket() as occupied:
+                occupied.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 occupied.bind(('127.0.0.1', port + offset))
                 occupied.listen(1)
                 self.controller.boot()
@@ -297,9 +358,10 @@ class IntegrationTests(unittest.TestCase):
         before = (self.controller.root / 'config.json').read_bytes()
         with patch.object(self.controller, 'ports_available', return_value=False), \
                 patch.object(self.controller, 'spawn') as spawn:
-            with self.assertRaisesRegex(subsystem.SubsystemError, '找不到可用'):
+            with self.assertRaisesRegex(subsystem.SubsystemError, 'No free Android port pair') as caught:
                 self.controller.boot()
             spawn.assert_not_called()
+        self.assertEqual(caught.exception.code, 'no_free_port')    # the Mac app translates this code
         self.assertEqual((self.controller.root / 'config.json').read_bytes(), before)
 
     def test_occupied_port_with_untrusted_old_record_stays_locked(self):
@@ -307,11 +369,13 @@ class IntegrationTests(unittest.TestCase):
         self.controller.configure({'port': port})
         subsystem.atomic_json(self.controller.root / 'emulator.json', {'pid': 1, 'birth': 'unknown'})
         with socket.socket() as occupied:
+            occupied.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             occupied.bind(('127.0.0.1', port)); occupied.listen(1)
             with patch.object(self.controller, 'spawn') as spawn:
-                with self.assertRaisesRegex(subsystem.SubsystemError, '尚未确认'):
+                with self.assertRaisesRegex(subsystem.SubsystemError, 'has not confirmed it exited') as caught:
                     self.controller.boot()
                 spawn.assert_not_called()
+            self.assertEqual(caught.exception.code, 'shutdown_unconfirmed')
             with self.assertRaisesRegex(subsystem.SubsystemError, 'Stop Android'):
                 self.controller.configure({'memory_mb': 8192})
         self.assertEqual(self.controller.config['memory_mb'], 4096)

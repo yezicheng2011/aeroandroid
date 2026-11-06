@@ -30,7 +30,11 @@ DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 40
 
 
 class SubsystemError(Exception):
-    pass
+    """An error with an English message. `code`, when set, lets the Mac app show its own translation."""
+
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code
 
 
 def host_arch():
@@ -81,6 +85,14 @@ def icns_from_png(png):
     return b"icns" + (len(entry) + 8).to_bytes(4, "big") + entry
 
 
+def read_plist(path):
+    """A property list as a dict, or {} when it is missing or unreadable."""
+    try:
+        return plistlib.loads(Path(path).read_bytes())
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return {}
+
+
 def shared_path(value):
     """Restrict guest file operations to the designated exchange directory."""
     if not isinstance(value, str) or not value.startswith("/sdcard/Download/MacBridge/"):
@@ -101,6 +113,8 @@ class Controller:
         self.logs.mkdir(exist_ok=True)
         self.runner = runner or subprocess.run
         self.arch = host_arch()   # which system image and emulator build this Mac runs
+        # A cold boot can be slow on an older Intel Mac, so the wait is adjustable.
+        self.boot_timeout = int(os.environ.get("ANDROID_SUBSYSTEM_BOOT_TIMEOUT") or (240 if self.arch == "arm64" else 480))
         # Quick Boot snapshots are for everyday use only. Provisioning builds a Controller
         # directly and always cold boots, because Magisk modules apply at boot.
         self.quick_boot = False
@@ -258,7 +272,8 @@ class Controller:
         if self.ports_available(current):
             return
         if self.running_emulator() or self.device() or self.unconfirmed_shutdown():
-            raise SubsystemError("安卓端口仍在使用，尚未确认旧子系统退出。请先停止子系统，再修改内存或重新启动。")
+            raise SubsystemError("The Android ports are still in use and the previous subsystem has not confirmed it exited. "
+                                 "Stop the subsystem first, then change memory or start again.", code="shutdown_unconfirmed")
         # Do not stop or take control of a program occupying these ports.
         for port in range(5554, 5681, 2):
             if port != current and self.ports_available(port):
@@ -266,7 +281,7 @@ class Controller:
                 atomic_json(self.root / "config.json", candidate)
                 self.config = candidate
                 return
-        raise SubsystemError("找不到可用的安卓端口对（5554–5681）。请关闭不需要的模拟器后重试。")
+        raise SubsystemError("No free Android port pair (5554-5681). Close emulators you do not need and try again.", code="no_free_port")
 
     def configured(self):
         return (self.avd_home / f"{self.avd}.ini").exists()
@@ -384,7 +399,10 @@ class Controller:
             p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=f, stderr=f,
                                  env=self.env, start_new_session=True)
         self.children[p.pid] = p
-        time.sleep(0.3)
+        for _ in range(8):   # a process that is going to fail on its arguments usually does so within a moment
+            time.sleep(0.1)
+            if p.poll() is not None:
+                break
         if p.poll() is not None:
             raise SubsystemError(f"Runtime exited ({p.returncode}). {log.read_text(errors='replace')[-3000:]}")
         birth = self.run(["/bin/ps", "-p", str(p.pid), "-o", "lstart="], check=False)
@@ -420,7 +438,7 @@ class Controller:
                         raise SubsystemError("Magisk ramdisk version or digest does not match")
                     argv += ["-ramdisk", str(ramdisk), "-feature", "-SystemAsRoot"]
                 atomic_json(self.root / "emulator.json", self.spawn(argv, "emulator.log"))
-            deadline = time.monotonic() + 240
+            deadline = time.monotonic() + self.boot_timeout
             while time.monotonic() < deadline:
                 if self.device() and self.adb("shell", "getprop", "sys.boot_completed", check=False).stdout.strip() == "1":
                     break
@@ -428,7 +446,8 @@ class Controller:
                     raise SubsystemError("Emulator stopped during boot; inspect emulator.log")
                 time.sleep(1)
             else:
-                raise SubsystemError("Boot exceeded 240 seconds; emulator left running for diagnosis")
+                raise SubsystemError(f"Boot exceeded {self.boot_timeout} seconds; emulator left running for diagnosis "
+                                     "(set ANDROID_SUBSYSTEM_BOOT_TIMEOUT to wait longer)")
             self.ready()
             # A headless guest's default display can remain asleep even after
             # boot completes. Wake its power group before opening app displays.
@@ -737,7 +756,7 @@ class Controller:
     def notification_settings(self):
         self.ready()
         # Permission is granted through Android's own settings UI.
-        return self.launch(COMPANION, "Mac Bridge · 通知设置")
+        return self.launch(COMPANION, "Mac Bridge · Notification settings")
 
     def export_launcher(self, package, label, app_path, destination, replace=False):
         """A real Mac app for one Android app: own Dock icon, opens only that app's window."""
@@ -763,10 +782,14 @@ class Controller:
         (contents / "Resources").mkdir()
         shutil.copy2(binary, contents / "MacOS/AndroidSubsystem")
         (contents / "Resources/AppIcon.icns").write_bytes(icon)
+        manager = read_plist(app / "Contents/Info.plist")
         info = {"CFBundleIdentifier": "dev.dan.androidsubsystem.app." + package,
                 "CFBundleName": label, "CFBundleDisplayName": label, "CFBundleIconFile": "AppIcon",
                 "CFBundleExecutable": "AndroidSubsystem", "CFBundlePackageType": "APPL",
-                "CFBundleVersion": "1", "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
+                "CFBundleShortVersionString": manager.get("CFBundleShortVersionString", "1"),
+                "CFBundleVersion": manager.get("CFBundleVersion", "1"),
+                "NSHumanReadableCopyright": manager.get("NSHumanReadableCopyright", ""),
+                "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
                 "NSCameraUsageDescription": "This Android app can use the Mac camera.",
                 "AndroidPackage": package, "SubsystemAppPath": str(app)}
         with (contents / "Info.plist").open("wb") as f:
@@ -774,6 +797,36 @@ class Controller:
         self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(target)])
         self.run(["/usr/bin/touch", str(target)], check=False)   # make Finder and the Dock reread the icon
         return {"launcher": str(target)}
+
+    def refresh_launchers(self, app_path, destination):
+        """After the manager is updated, bring the Mac apps it made up to date: same binary, same version.
+
+        Each launcher holds its own copy of the manager's executable, so an update would otherwise never
+        reach them. The new binary goes in under a new inode, so a launcher that is running is not disturbed."""
+        app = Path(app_path).resolve()
+        binary = app / "Contents/MacOS/AndroidSubsystem"
+        manager = read_plist(app / "Contents/Info.plist")
+        version = manager.get("CFBundleShortVersionString")
+        refreshed = []
+        if not binary.is_file() or not version:
+            return {"refreshed": refreshed}
+        for bundle in sorted(Path(destination).expanduser().glob("*.app")):
+            info = read_plist(bundle / "Contents/Info.plist")
+            if not info.get("AndroidPackage") or Path(info.get("SubsystemAppPath", "")).resolve() != app:
+                continue
+            if info.get("CFBundleShortVersionString") == version:
+                continue
+            fresh = bundle / "Contents/MacOS/.AndroidSubsystem.new"
+            shutil.copy2(binary, fresh)
+            os.replace(fresh, bundle / "Contents/MacOS/AndroidSubsystem")
+            for key in ("CFBundleShortVersionString", "CFBundleVersion", "NSHumanReadableCopyright"):
+                if key in manager:
+                    info[key] = manager[key]
+            with (bundle / "Contents/Info.plist").open("wb") as f:
+                plistlib.dump(info, f)
+            self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(bundle)])
+            refreshed.append(bundle.name)
+        return {"refreshed": refreshed}
 
     def install_app(self, files, app_path, destination):
         """Install APK(s) and leave a ready-to-open Mac app for them in `destination`."""
@@ -796,6 +849,7 @@ def dispatch(controller, action, params):
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
              "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
              "prime": lambda: controller.prime(),
+             "refresh-launchers": lambda: controller.refresh_launchers(params["app_path"], params["destination"]),
              "install-app": lambda: controller.install_app(params["files"], params["app_path"], params["destination"])}
     if action not in table:
         raise SubsystemError("Unknown action")
@@ -817,7 +871,7 @@ def main():
         result = dispatch(controller, args.action, params)
         print(json.dumps({"ok": True, "data": result}, ensure_ascii=False))
     except (SubsystemError, ValueError, KeyError, TypeError, OSError) as e:
-        print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+        print(json.dumps({"ok": False, "error": str(e), "code": getattr(e, "code", None)}, ensure_ascii=False))
         sys.exit(1)
 
 

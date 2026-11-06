@@ -1,4 +1,6 @@
 # Sourced by build.sh and Install.command (needs $project_root).
+# shellcheck shell=bash
+# shellcheck disable=SC2154  # project_root is set by the script that sources this file
 # HOST_ARCH is arm64 on Apple Silicon (also in a Rosetta shell) and x86_64 on an Intel Mac.
 HOST_ARCH="$(uname -m)"
 if [[ "$HOST_ARCH" != arm64 && "$(sysctl -in hw.optional.arm64 2>/dev/null || true)" == 1 ]]; then HOST_ARCH=arm64; fi
