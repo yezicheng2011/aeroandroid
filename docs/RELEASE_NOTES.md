@@ -1,12 +1,12 @@
-## aeroandroid 0.3.0 · macOS DMG (Apple Silicon + Intel)
+## aeroandroid 0.4.0 · macOS DMG (Apple Silicon + Intel)
 
-**下载 / Download:** `aeroandroid-0.3.0-macOS-universal.dmg` — Apple 芯片与 Intel Mac（Intel 需 2018 年及以后机型）通用，macOS 14+。不支持 Windows。 / Universal: Apple Silicon and Intel (2018+), macOS 14+. Not Windows.
+**下载 / Download:** `aeroandroid-0.4.0-macOS-universal.dmg` — Apple 芯片与 Intel Mac（Intel 需 2018 年及以后机型）通用，macOS 14+。不支持 Windows。 / Universal: Apple Silicon and Intel (2018+), macOS 14+. Not Windows.
 
 ### 本版新内容 / What's new
-- **双击 `.apk` 即装成 Mac 应用**：隐藏安装助手会安装应用，并在 `~/Applications` 生成带真实图标的独立 `.app`（自己的 Dock 图标，只显示该应用窗口）。
-- **默认 Android 17**（API 37）完整版：Magisk root + microG + 预装 Aurora Store / Fennec；`./build.sh --android 16` 或 `--pure` 可选。
-- **游戏**：Mac 手柄映射为 Android 游戏手柄；GPU / 60 FPS 等性能选项。
-- **Intel Mac 支持**：universal 二进制；Intel 首次打开会提示部分 arm64-only 应用无法运行。
+- **Intel Mac ARM→x86 转译层**：完整版在 Intel 上从 AOSP 的 libndk_translation / berberis（Apache-2.0）构建 Magisk 模块，使多数 arm64 APK 可在 x86_64 系统镜像上运行；可用 `--no-arm-translation` 跳过。纯净版不下载 Google APIs 镜像。
+- **Magisk 模块安装修复**：在首次打开 Magisk 应用之前先填充 `/data/adb/magisk`，修复「Incomplete Magisk install」（microG 等步骤同样受益）。
+- **受限网络镜像**：F-Droid 下载优先尝试清华 / 南大镜像（`--mirror cn` / `FDROID_MIRROR`）；SHA-256 不符则跳过该镜像。
+- **预装应用按 ABI 选择**：Intel 上优先原生 x86_64 构建（如 Fennec）。
 - **签名**：应用与 DMG 均 ad-hoc 签名；打开时提示「无法验证开发者」，不会显示「已损坏」。右键 → 打开即可。
 - **版权 / Copyright：** Copyright © 2026 daniel.ye叶子诚（Apache-2.0）。详见 `NOTICE` 与 `docs/LICENSING.md`。
 
@@ -34,3 +34,4 @@ DMG 内包含：
 - CPython 3.12（python-build-standalone）— PSF License
 - scrcpy v5.0.1 — Apache-2.0
 - 完整版默认还会下载：Magisk、host_patch.sh、Vector、microg-spoof — GPL-3.0；microG GmsCore / Companion、Aurora Store、Fennec — 见各自上游许可证
+- Intel 完整版另下载 Google APIs x86_64 系统镜像，仅抽取 AOSP ARM translator（libndk_translation / berberis，Apache-2.0）后丢弃镜像 — 见 `NOTICE` 与 `docs/LICENSING.md`
