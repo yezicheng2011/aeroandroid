@@ -1,4 +1,6 @@
-# aeroandroid Self-build
+# aeroandroid contributor build
+
+> Everyday installs use the official DMG at [aeroandroid.com](https://aeroandroid.com/#download). This page is for contributors who want to customize the project.
 
 
 ### Requirements
@@ -35,4 +37,4 @@ This repository is Apache-2.0. The microG signature module (`microg-spoof/`, der
 - **SDK license**: the installer shows the Android SDK license for you to accept.
 - **Disk space**: 20 GB minimum; the full edition needs more for guest data.
 - **Logs**: `~/Library/Application Support/AndroidSubsystem/logs/`; diagnostics via `scripts/collect-diagnostics.py`.
-- **Don't want to build**: download the full offline package at https://aeroandroid.com/releases.html.
+- **Normal install**: download the official macOS DMG at https://aeroandroid.com/#download — no packaging or compiling required.
