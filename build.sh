@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # aeroandroid self-build: one command to check prerequisites, download the
 # pinned runtime (SHA-256 verified) into ./runtime-cache and run the installer.
-# Copyright 2026 daniel.ye叶子诚 — Apache-2.0
+# Copyright 2026 daniel.ye — Apache-2.0
 set -euo pipefail
 
 project_root="$(cd "$(dirname "$0")" && pwd)"
@@ -69,7 +69,7 @@ export ANDROID_SUBSYSTEM_LOCK="$lock_file" AEROANDROID_ARM_TRANSLATION="$arm_tra
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
-die() { printf '错误 / Error: %s\n' "$*" >&2; exit 1; }
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
 sha256_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
@@ -78,9 +78,9 @@ sha256_of() {
 
 check_prereqs() {
   local ok=1
-  say '检查环境 / Checking prerequisites'
+  say 'Checking prerequisites'
   if [[ "$(uname -s)" != Darwin ]]; then
-    echo '  ✗ 需要 Mac / Requires a Mac (Apple Silicon or Intel)'; ok=0
+    echo '  ✗ Requires a Mac (Apple Silicon or Intel)'; ok=0
   else
     local ver; ver="$(sw_vers -productVersion)"
     if [[ "${ver%%.*}" -lt 14 ]]; then echo "  ✗ macOS $ver < 14"; ok=0; else echo "  ✓ macOS $ver $HOST_ARCH"; fi
@@ -93,7 +93,7 @@ check_prereqs() {
   echo '  · JDK 17, Android SDK/emulator, Python 3.12 and scrcpy are downloaded into runtime-cache (pinned versions); no system install needed.'
   local free_gb
   free_gb="$(df -Pk "$project_root" | awk 'NR==2{print int($4/1048576)}')"
-  if [[ "$free_gb" -lt 20 ]]; then echo "  ✗ 可用空间 ${free_gb} GB < 20 GB / free disk space"; ok=0; else echo "  ✓ ${free_gb} GB free"; fi
+  if [[ "$free_gb" -lt 20 ]]; then echo "  ✗ free disk space ${free_gb} GB < 20 GB"; ok=0; else echo "  ✓ ${free_gb} GB free"; fi
   [[ "$ok" == 1 ]]
 }
 
@@ -101,7 +101,7 @@ pick_mirror() {
   [[ "$mirror" != auto ]] && return
   if curl -fsI --max-time 6 https://dl.google.com/android/repository/repository2-3.xml >/dev/null 2>&1 \
      && curl -fsI --max-time 6 https://github.com >/dev/null 2>&1; then mirror=global; else mirror=cn; fi
-  say "自动选择下载源 / Auto-selected mirror: $mirror"
+  say "Auto-selected mirror: $mirror"
 }
 
 # Rewrite an upstream URL for the chosen mirror. Integrity is always enforced
@@ -125,14 +125,14 @@ fetch() { # url dest sha256
     echo "  ↓ $(basename "$dest")  ($try)"
     if curl -fL --retry 3 --retry-delay 2 -C - -o "$dest.part" "$try"; then
       if [[ "$(sha256_of "$dest.part")" == "$want" ]]; then mv "$dest.part" "$dest"; return; fi
-      echo '    SHA-256 不匹配，重试 / mismatch, retrying'; rm -f "$dest.part"
+      echo '    SHA-256 mismatch, retrying'; rm -f "$dest.part"
     fi
   done
-  die "下载失败 / download failed: $url"
+  die "download failed: $url"
 }
 
 fetch_runtime() {
-  say "下载运行时到 / Downloading runtime into $cache"
+  say "Downloading runtime into $cache"
   local lock="$lock_file"
   local line url rel sha
   while IFS=$'\t' read -r url rel sha; do
@@ -154,7 +154,7 @@ PY
     local src="${cat%%:*}" name="${cat##*:}"
     curl -fsSL --retry 3 -o "$cache/android16-macos/$name" "$(mirror_url "$google_base$src")" \
       || curl -fsSL --retry 3 -o "$cache/android16-macos/$name" "$google_base$src" \
-      || die "无法获取 SDK 目录 / cannot fetch $src"
+      || die "cannot fetch $src"
   done
 }
 
@@ -162,13 +162,12 @@ fetch_gpl() {
   cat <<'NOTICE'
 
   ──────────────────────────────────────────────────────────────────────
-  GPL-3.0 NOTICE / 许可证提示
+  GPL-3.0 NOTICE
   The following components are licensed under GPL-3.0, NOT Apache-2.0,
   and are downloaded from upstream because you are building the full edition (use --pure to skip):
     · microg-spoof/  (MicroG Signature Compatibility, derived from FakeGApps)
     · third_party/Magisk/host_patch.sh  (topjohnwu/Magisk v30.7)
   They stay under their own license. Do not redistribute them as Apache-2.0.
-  以上组件为 GPL-3.0，因构建完整版而从上游下载（--pure 可跳过），保持其原许可证。
   ──────────────────────────────────────────────────────────────────────
 
 NOTICE
@@ -198,7 +197,7 @@ PY
 # the guest APKs can be compiled before the installer runs.
 bootstrap_toolchain() {
   local tc="$cache/toolchain" lock="$lock_file" rel tmp top
-  say "准备编译工具链 / Preparing build toolchain in $tc"
+  say "Preparing build toolchain in $tc"
   mkdir -p "$tc/sdk/build-tools" "$tc/sdk/platforms"
   for kind in jdk build-tools platform; do
     rel="$(python3 - "$lock" "$kind" <<'PY'
@@ -228,7 +227,7 @@ PY
   done
   local java_home="$tc/jdk"
   [[ -d "$java_home/Contents/Home" ]] && java_home="$java_home/Contents/Home"
-  say '编译 Android 端组件 / Building guest APKs'
+  say 'Building guest APKs'
   (
     export JAVA_HOME="$java_home" ANDROID_SUBSYSTEM_SDK="$tc/sdk"
     /bin/bash "$project_root/scripts/build-guest.sh"
@@ -241,16 +240,12 @@ intel_notice() {
   cat <<'NOTICE'
 
   ──────────────────────────────────────────────────────────────────────
-  Intel Mac detected / 检测到 Intel Mac
+  Intel Mac detected
   Android runs here as x86_64. Many Android apps, especially most 3D games,
   ship only arm64 code and need ARM translation to run. The full install adds
   it (one extra ~2 GB download from Google, slower than native). With --pure
   or --no-arm-translation those apps will NOT install. Plain Java/Kotlin apps
   and apps with x86_64 code are not affected.
-  这里的安卓以 x86_64 运行。很多安卓应用，尤其是大多数 3D 游戏，只含 arm64
-  代码，需要「ARM 翻译」才能运行。完整版安装会自动加入（多下载约 2 GB，比原生
-  慢）；使用 --pure 或 --no-arm-translation 时这些应用将无法安装。纯 Java/Kotlin
-  应用和带 x86_64 代码的应用不受影响。
   ──────────────────────────────────────────────────────────────────────
 
 NOTICE
@@ -258,23 +253,23 @@ NOTICE
 
 main() {
   if [[ "$HOST_ARCH" != arm64 ]]; then intel_notice; fi
-  check_prereqs || { [[ "$check_only" == 1 ]] && exit 1; die '环境检查未通过 / prerequisites missing'; }
-  [[ "$check_only" == 1 ]] && { say '环境检查通过 / All prerequisites OK'; exit 0; }
+  check_prereqs || { [[ "$check_only" == 1 ]] && exit 1; die 'prerequisites missing'; }
+  [[ "$check_only" == 1 ]] && { say 'All prerequisites OK'; exit 0; }
   pick_mirror
   # Pre-installed apps come from F-Droid; these mirrors carry identical files, and every APK is SHA-256 pinned.
   if [[ "$mirror" == cn ]]; then export FDROID_MIRROR="${FDROID_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/fdroid/repo/ https://mirror.nju.edu.cn/fdroid/repo/}"; fi
   fetch_runtime
   if [[ "$with_gpl" == 1 ]]; then fetch_gpl; fi
-  if [[ "$download_only" == 1 ]]; then say "运行时已就绪 / Runtime cache ready: $cache"; exit 0; fi
+  if [[ "$download_only" == 1 ]]; then say "Runtime cache ready: $cache"; exit 0; fi
   bootstrap_toolchain
   export ANDROID_SUBSYSTEM_CACHE="$cache"
   if [[ "$with_gpl" == 1 ]]; then export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=0
   else export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=1; fi
-  say '开始编译与安装 / Building and installing'
+  say 'Building and installing'
   /bin/bash "$project_root/Install.command" && exit 0
   local status=$?
   if [[ "$android" == 17 && -t 0 ]]; then
-    printf '\n安卓 17 安装未完成。改用安卓 16 重试？/ Android 17 install did not finish. Retry on Android 16? [y/N] '
+    printf '\nAndroid 17 install did not finish. Retry on Android 16? [y/N] '
     read -r answer || answer=''
     if [[ "$answer" == [yY]* ]]; then AEROANDROID_FORCE_ANDROID=16 exec /bin/bash "$0" "${original_args[@]}"; fi
   fi

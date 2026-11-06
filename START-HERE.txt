@@ -1,8 +1,19 @@
 aeroandroid
 
-Install from the official macOS DMG. You do not package or compile anything yourself.
-Download it from the latest GitHub release or https://aeroandroid.com/releases.html,
-open the disk image, and right-click "安装 aeroandroid.command" → Open.
+Install from the official macOS DMG. You do not package a release yourself: the installer
+downloads the runtime and builds the Mac app on your machine.
+Download it from the latest GitHub release or https://aeroandroid.com/releases.html
+(aeroandroid-1.0.1-macOS-universal.dmg). Open the disk image, Control-click
+"Install aeroandroid.command", and choose Open. On macOS 15, if it was blocked:
+System Settings → Privacy & Security → Open Anyway.
+
+The installer is ad-hoc signed. Gatekeeper says it cannot verify the developer.
+It does not say the file is damaged.
+
+The script copies the source to ~/aeroandroid and runs build.sh. When it finishes,
+open ~/Applications/Android Subsystem.app. That is the install. The Android
+Subsystem.app inside the DMG is only a prebuilt sample; do not use it in place of
+the installed copy.
 
 The DMG contains the manager app, the installer, and the source. The Android runtime
 (about 1.8 GB) is downloaded on your Mac during installation and checked with SHA-256.
@@ -10,9 +21,11 @@ The Android SDK license does not allow that runtime to be redistributed inside t
 
 Requires a Mac (Apple Silicon, or Intel from 2018 on), macOS 14 or later, the Xcode
 Command Line Tools (xcode-select --install), about 20 GB of free disk, and a network
-connection.
+connection. The installer builds the Mac app with Swift, so the Command Line Tools
+are required.
 
-The default install is the full edition: Android 17, AOSP, Magisk, and microG.
+The default install is the full edition: Android 17, AOSP, Magisk, microG, Aurora Store,
+and Fennec.
   Android 16:          ./build.sh --android 16
   AOSP only:           ./build.sh --pure
   --with-gpl           alias of the default full edition

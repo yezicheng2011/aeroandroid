@@ -142,7 +142,7 @@ def provision(cache, root=None):
     if not ramdisk.is_file(): raise RuntimeError(f"Android {c.config['android']} {c.abi} ramdisk is missing")
     with zipfile.ZipFile(assets['magisk']) as apk:
         busybox = workspace / 'busybox'; busybox.write_bytes(apk.read(f'lib/{c.abi}/libbusybox.so'))
-    print(f"修补私有 ramdisk：{assets['magisk'].name} / Android {c.config['android']} {c.abi}", flush=True)
+    print(f"Patching the private ramdisk: {assets['magisk'].name} / Android {c.config['android']} {c.abi}", flush=True)
     c.adb('push', str(busybox), '/data/local/tmp/busybox')
     c.adb('push', str(assets['magisk']), '/data/local/tmp/magisk.apk', timeout=120)
     c.adb('push', str(patch_script), '/data/local/tmp/mac_magisk_patch.sh')
@@ -163,11 +163,11 @@ def provision(cache, root=None):
     c.boot()
     adb_root(c)
     _, version = magisk_binary(c)
-    print('冷启动后 Magisk：', version, flush=True)
+    print('Magisk after cold boot:', version, flush=True)
     report = verify(c)
     subsystem.atomic_json(c.root / 'provision-report.json', report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    print('Magisk root / 管理器检查完成。M5 图形仍需实测。')
+    print('Magisk root and manager checks finished. Graphics on an M5 still need a hands-on check.')
     return report
 
 
@@ -195,4 +195,4 @@ def main():
 if __name__ == '__main__':
     try: main()
     except (OSError, RuntimeError, ValueError, KeyError, subsystem.SubsystemError, zipfile.BadZipFile) as e:
-        print('Magisk root 配置未完成：', e, file=sys.stderr); sys.exit(1)
+        print('Magisk root setup did not finish:', e, file=sys.stderr); sys.exit(1)

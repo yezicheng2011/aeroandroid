@@ -97,8 +97,8 @@ jobs:
           # Not needed to build or install: unit tests and the full-size logo (the app carries AppIcon.icns).
           rm -f dmgroot/aeroandroid-source/tests/test_*.py dmgroot/aeroandroid-source/tests/fake_runtime.py dmgroot/aeroandroid-source/assets/logo-1024.png
           ditto "dist/Android Subsystem.app" "dmgroot/Android Subsystem.app"
-          cp "packaging/dmg/安装 aeroandroid.command" "packaging/dmg/首次安装说明 README-FIRST.txt" LICENSE NOTICE dmgroot/
-          chmod +x "dmgroot/安装 aeroandroid.command"
+          cp "packaging/dmg/Install aeroandroid.command" "packaging/dmg/README-FIRST.txt" LICENSE NOTICE dmgroot/
+          chmod +x "dmgroot/Install aeroandroid.command"
           # No GPL parts: microg-spoof/ and third_party/Magisk/ are not in git.
           test ! -e dmgroot/aeroandroid-source/microg-spoof && test ! -e dmgroot/aeroandroid-source/third_party/Magisk
           xattr -cr dmgroot
@@ -112,7 +112,7 @@ jobs:
           codesign --verify --deep --strict "$mnt/Android Subsystem.app"
           lipo -info "$mnt/Android Subsystem.app/Contents/MacOS/AndroidSubsystem"
           # Installer smoke test from the mounted image: copies source, then build.sh prints help.
-          HOME="$RUNNER_TEMP/inst-home" bash "$mnt/安装 aeroandroid.command" --help
+          HOME="$RUNNER_TEMP/inst-home" bash "$mnt/Install aeroandroid.command" --help
           test -x "$RUNNER_TEMP/inst-home/aeroandroid/build.sh"
           HOME="$RUNNER_TEMP/inst-home" bash "$RUNNER_TEMP/inst-home/aeroandroid/build.sh" --check
           hdiutil detach "$mnt"

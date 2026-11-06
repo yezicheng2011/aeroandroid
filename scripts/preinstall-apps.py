@@ -135,5 +135,5 @@ if __name__ == '__main__':
     try:
         main()
     except (OSError, RuntimeError, KeyError, ValueError, subsystem.SubsystemError) as error:
-        print('预装应用未完成 / Pre-installed apps incomplete:', error, file=sys.stderr)
+        print('Pre-installed apps incomplete:', error, file=sys.stderr)
         sys.exit(1)

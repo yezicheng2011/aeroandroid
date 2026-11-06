@@ -6,7 +6,9 @@ Issues and pull requests are welcome.
 
 Most people should use the official macOS DMG from the
 [GitHub releases](https://github.com/yezicheng2011/aeroandroid/releases) or
-https://aeroandroid.com/releases.html. They do not package or compile the app.
+https://aeroandroid.com/releases.html.
+`Install aeroandroid.command` in that DMG downloads the runtime and builds the app.
+It still needs the Xcode Command Line Tools (`xcode-select --install`).
 
 `./build.sh` from a checkout installs the full edition by default (Android 17, AOSP + Magisk + microG).
 `./build.sh --pure` is AOSP only. `--with-gpl` is an alias of the default. Android 16 is `--android 16`.

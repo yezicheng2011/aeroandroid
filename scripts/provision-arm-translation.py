@@ -58,8 +58,7 @@ def build_module(cache, controller, workspace):
         raise RuntimeError(f"Invalid pinned Google APIs image: {image.name}")
     module = workspace / 'MacArmTranslation.zip'
     report = arm_translation.build_from_zip(image, module)
-    print(f"ARM 翻译模块：{report['files']} 个文件，{len(report['props'])} 个属性 / "
-          f"translator module: {report['files']} files, {len(report['props'])} properties", flush=True)
+    print(f"translator module: {report['files']} files, {len(report['props'])} properties", flush=True)
     return module
 
 
@@ -134,7 +133,7 @@ def provision(cache, root=None):
     report['module_sha256'] = core.digest(module)
     subsystem.atomic_json(controller.root / 'arm-translation-report.json', report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    print('ARM 翻译已启用：现在可以安装只含 arm64 代码的应用。 / ARM translation is on: arm64-only apps can be installed.')
+    print('ARM translation is on: arm64-only apps can be installed.')
     return report
 
 
@@ -161,5 +160,5 @@ if __name__ == '__main__':
         main()
     except (OSError, RuntimeError, KeyError, ValueError, zipfile.BadZipFile, arm_translation.sysimg.ImageError,
             subsystem.SubsystemError) as error:
-        print('ARM 翻译未完成 / ARM translation not installed:', error, file=sys.stderr)
+        print('ARM translation not installed:', error, file=sys.stderr)
         sys.exit(1)

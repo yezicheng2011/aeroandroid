@@ -14,17 +14,17 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 def main():
     if platform.system() != 'Darwin':
-        raise RuntimeError('请在 Mac 上运行图形验收。 / Run the graphics acceptance on a Mac.')
+        raise RuntimeError('Run the graphics acceptance on a Mac.')
     root = Path(os.environ.get('ANDROID_SUBSYSTEM_HOME', Path.home() / 'Library/Application Support/AndroidSubsystem'))
     app = Path.home() / 'Applications/Android Subsystem.app'
-    if not app.exists(): raise RuntimeError('请先运行 Graphics-Install.command。')
+    if not app.exists(): raise RuntimeError('Run Graphics-Install.command first.')
     output = root / 'acceptance' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     output.mkdir(parents=True, mode=0o700)
     result = subprocess.run([sys.executable, str(PROJECT / 'backend/subsystem.py'), 'native-session',
                              json.dumps({'package': 'com.android.settings'})], capture_output=True, text=True)
     try: response = json.loads(result.stdout)
-    except ValueError: raise RuntimeError('控制器没有返回有效结果：' + result.stderr[-2000:])
-    if result.returncode or not response.get('ok'): raise RuntimeError(response.get('error', '无法启动图形服务'))
+    except ValueError: raise RuntimeError('The controller did not return a valid result: ' + result.stderr[-2000:])
+    if result.returncode or not response.get('ok'): raise RuntimeError(response.get('error', 'Could not start the graphics service'))
     # A session contains the local token. Keep it private and delete it after the test.
     with tempfile.TemporaryDirectory(prefix='surface-test-', dir=root) as private:
         session = Path(private) / 'session.json'
@@ -33,13 +33,13 @@ def main():
                         '--output', str(output)], check=True)
     for package in ['com.android.settings', 'dev.dan.androidsubsystem']:
         subprocess.run(['/usr/bin/open', '-a', str(app), 'android-subsystem://launch?package=' + package], check=True)
-    print('\n真实 Guest 抓帧与双显示器测试通过。像素图和结果：', output)
-    print('两个原生窗口已请求打开。请检查窗口中实际出现对应界面，分别缩放、点击，并关闭其中一个。')
-    print('这一步仍需要你观察；自动抓帧通过不等于 Metal 显示验收通过。')
+    print('\nReal Guest frame capture and the two-display test passed. Pixel images and results:', output)
+    print('Two native windows were asked to open. Check that each window shows the matching screen, then resize, click, and close one of them.')
+    print('You still need to look: captured frames passing does not mean the Metal display passed acceptance.')
     subprocess.run(['/usr/bin/open', str(output)], check=True)
 
 
 if __name__ == '__main__':
     try: main()
     except (RuntimeError, OSError, subprocess.CalledProcessError) as error:
-        print('图形验收未完成：', error, file=sys.stderr); sys.exit(1)
+        print('Graphics acceptance did not finish:', error, file=sys.stderr); sys.exit(1)

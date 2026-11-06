@@ -89,8 +89,8 @@ def prepare(root, home=None, runner=subprocess.run, factory=controller_factory, 
     # Config and memory settings are retained; old AVD userdata is kept separately.
     shutil.copyfile(root / 'config.json', target)
     target.chmod(0o600)
-    print('旧子系统已停止，管理应用已退出。配置备份：', target)
-    print('内存设置将保留；纯 AOSP 使用独立 AVD，旧安卓应用数据不会被擦除或直接混入新系统。')
+    print('The old subsystem has stopped and the manager app has quit. Configuration backup:', target)
+    print('Memory settings are kept. Pure AOSP uses its own AVD. Old Android app data is not erased and is not merged into the new system.')
     return target
 
 
@@ -107,5 +107,5 @@ if __name__ == '__main__':
     try:
         main()
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
-        print('迁移准备未完成：', error, file=sys.stderr)
+        print('Migration preparation did not finish:', error, file=sys.stderr)
         sys.exit(1)
