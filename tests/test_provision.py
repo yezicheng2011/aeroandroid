@@ -14,8 +14,8 @@ provision = importlib.util.module_from_spec(spec); spec.loader.exec_module(provi
 
 
 class FakeController:
-    api = 36
-    image_api = '36'
+    api = 37
+    image_api = '37.0'
     arch = 'arm64'
     abi = 'arm64-v8a'
     image_tag = 'default'
@@ -23,7 +23,7 @@ class FakeController:
     def __init__(self, root=None):
         self.root = Path(root) if root else None
         self.sdk = self.root / 'sdk' if self.root else None
-        self.config = {'android': 16}
+        self.config = {'android': 17}
         self.calls = []
         self.manager_installed = True
         self.magisk_root = True
@@ -48,7 +48,7 @@ class FakeController:
 
     @property
     def magisk_image_dir(self):
-        return self.root / 'images/16/default'
+        return self.root / 'images/17/default'
 
     def adb(self, *args, **kwargs):
         self.calls.append(args)
@@ -98,13 +98,13 @@ class MagiskProvisionTests(unittest.TestCase):
             root = base / 'runtime'
             root.mkdir()
             controller = FakeController(root)
-            original = controller.sdk / 'system-images/android-36/default/arm64-v8a/ramdisk.img'
+            original = controller.sdk / 'system-images/android-37.0/default/arm64-v8a/ramdisk.img'
             original.parent.mkdir(parents=True)
             original.write_bytes(b'unchanged-sdk-ramdisk')
             with mock.patch.object(provision, 'PROJECT', project), mock.patch.object(
                     provision.subsystem, 'Controller', return_value=controller):
                 report = provision.provision(cache, root)
-            patched = root / 'images/16/default/ramdisk.magisk.img'
+            patched = root / 'images/17/default/ramdisk.magisk.img'
             descriptor = json.loads((patched.parent / 'ramdisk.json').read_text())
             self.assertEqual(controller.config['magisk_ramdisk'], str(patched))
             self.assertEqual(descriptor['image_tag'], 'default')

@@ -41,7 +41,7 @@ GUEST_MODULE = '/data/local/tmp/mac_subsystem_arm_translation.zip'
 
 
 def source_entry(controller):
-    lock = json.loads(core.lock_file(controller.config['android'], controller.arch).read_text())
+    lock = json.loads(core.lock_file(controller.arch).read_text())
     return next((e for e in lock['archives'] if e.get('kind') == 'arm_translation'), None)
 
 
@@ -111,8 +111,8 @@ def provision(cache, root=None):
     if controller.arch == 'arm64':
         print('Apple Silicon runs arm64 apps natively; no translation needed.')
         return None
-    if controller.config['android'] not in (16, 17):
-        raise RuntimeError('ARM translation supports Android 16 and 17')
+    if controller.config['android'] != 17:
+        raise RuntimeError('ARM translation supports Android 17')
     workspace = controller.root / 'provision-work'
     workspace.mkdir(exist_ok=True)
     apk = core.magisk_apk(cache, controller)

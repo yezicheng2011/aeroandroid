@@ -14,7 +14,7 @@ labels: ''
 - macOS version:
 - Mac: Apple Silicon or Intel
 - aeroandroid version (DMG or `build.sh` flags):
-- Android 16 or 17, and `--pure` or the default full edition:
+- `--pure` or the default full edition:
 
 ## Logs
 

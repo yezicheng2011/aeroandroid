@@ -2,8 +2,7 @@
 # Online developer setup. Prefer cached SDK archives via setup-offline-mac.py when available.
 set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${1:-17}"
-[[ "$version" == 16 || "$version" == 17 ]] || { echo 'Choose Android 16 or 17.' >&2; exit 1; }
+version=17   # the only Android version (published as android-37.0)
 [[ "$(uname -s)" == Darwin ]] || { echo 'Requires a Mac.' >&2; exit 1; }
 command -v brew >/dev/null || { echo 'Install Homebrew from https://brew.sh, then run this script again.' >&2; exit 1; }
 xcrun --find swift >/dev/null || { echo 'Install Xcode Command Line Tools with xcode-select --install.' >&2; exit 1; }
@@ -20,11 +19,9 @@ available="$("$manager" --sdk_root="$sdk_root" --list --channel=0)"
 host_arch="$(uname -m)"
 if [[ "$host_arch" != arm64 && "$(sysctl -in hw.optional.arm64 2>/dev/null || true)" == 1 ]]; then host_arch=arm64; fi
 abi=x86_64; [[ "$host_arch" == arm64 ]] && abi=arm64-v8a
-api="$((version + 20))"; [[ "$version" == 17 ]] && api="37.0"   # Android 17 is published as android-37.0
-image="system-images;android-$api;default;$abi"
+image="system-images;android-37.0;default;$abi"
 if ! printf '%s\n' "$available" | grep -F "$image" >/dev/null; then
   echo "The SDK does not currently offer the stable $abi image: $image" >&2
-  echo 'Android 16 remains supported; no older system will be installed automatically.' >&2
   exit 1
 fi
 "$manager" --sdk_root="$sdk_root" 'platform-tools' 'emulator' 'platforms;android-36' 'build-tools;36.0.0' "$image"

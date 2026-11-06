@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -37,7 +39,7 @@ class ArchiveTests(unittest.TestCase):
 class MetadataTests(unittest.TestCase):
     def test_pinned_stable_revision_and_namespaces(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); metadata = root / 'android16-macos'; metadata.mkdir()
+            root = Path(directory); metadata = root / 'sdk-macos'; metadata.mkdir()
             (metadata / 'repository2-3.xml').write_text('''<sdk:sdk-repository
                 xmlns:sdk="http://schemas.android.com/sdk/android/repo/repository2/03"
                 xmlns:generic="http://schemas.android.com/repository/android/generic/02"
@@ -75,29 +77,44 @@ class MetadataTests(unittest.TestCase):
             with patch('builtins.input',side_effect=AssertionError('Already accepted license prompted again')):
                 installer.accept_sdk_licenses({'android-sdk-license':'Terms'},sdk,root)
     def test_module_update_keeps_sdk_fingerprint_but_image_change_invalidates_it(self):
-        lock = {'android': 16, 'image_tag': 'default', 'archives': [
-            {'package': 'system-images;android-36;default;arm64-v8a', 'sha256': 'a'},
+        lock = {'android': 17, 'image_tag': 'default', 'archives': [
+            {'package': 'system-images;android-37.0;default;arm64-v8a', 'sha256': 'a'},
             {'kind': 'microg_services', 'sha256': 'b'}]}
         first = installer.runtime_fingerprint(lock)
         lock['archives'][1]['sha256'] = 'c'
         self.assertEqual(installer.runtime_fingerprint(lock), first)
         lock['archives'][0]['sha256'] = 'd'
         self.assertNotEqual(installer.runtime_fingerprint(lock), first)
-    def test_legacy_image_cleanup_keeps_userdata_and_refuses_redirected_paths(self):
+    def test_old_image_cleanup_keeps_userdata_and_refuses_redirected_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'runtime'; root.mkdir()
-            legacy = root / 'sdk/system-images/android-36/google_apis/arm64-v8a'
-            legacy.mkdir(parents=True); (legacy / 'system.img').write_text('old image')
-            userdata = root / 'avd/MacAndroid_16_arm64.avd/userdata-qemu.img'
+            images = root / 'sdk/system-images'
+            old = [images / 'android-36/google_apis/arm64-v8a', images / 'android-36/default/arm64-v8a', images / 'android-36/default/x86_64']
+            for image in old:
+                image.mkdir(parents=True); (image / 'system.img').write_text('old image')
+            current = images / 'android-37.0/default/arm64-v8a'
+            current.mkdir(parents=True); (current / 'system.img').write_text('android 17')
+            userdata = root / 'avd/MacAndroid_16_AOSP_arm64.avd/userdata-qemu.img'
             userdata.parent.mkdir(parents=True); userdata.write_text('user data')
-            installer.retire_legacy_google_image(root)
-            self.assertFalse(legacy.exists())
-            self.assertEqual(userdata.read_text(), 'user data')
+            with contextlib.redirect_stdout(io.StringIO()) as printed:
+                installer.retire_old_images(root)
+            self.assertFalse(any(image.exists() for image in old))                  # Android 16 and the Google APIs image are gone
+            self.assertEqual((current / 'system.img').read_text(), 'android 17')   # the current runtime is untouched
+            self.assertEqual(userdata.read_text(), 'user data')                     # so is the old data, kept as a backup
+            self.assertIn('MacAndroid_16_AOSP_arm64.avd', printed.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()) as quiet:
+                installer.retire_old_images(root)                                   # nothing left: harmless
+            self.assertEqual(quiet.getvalue(), '')
             outside = Path(directory) / 'outside'; outside.mkdir()
             (outside / 'important').write_text('keep')
-            legacy.symlink_to(outside, target_is_directory=True)
+            old[0].symlink_to(outside, target_is_directory=True)
             with self.assertRaisesRegex(RuntimeError, 'redirected'):
-                installer.retire_legacy_google_image(root)
+                installer.retire_old_images(root)
             self.assertEqual((outside / 'important').read_text(), 'keep')
+
+    def test_installer_drops_a_stale_magisk_ramdisk_and_writes_the_config_in_one_step(self):
+        source = MODULE.read_text()
+        self.assertIn("config.get('android') != lock['android']", source)       # an Android 16 ramdisk must not outlive Android 16
+        self.assertIn("pending.replace(config_path)", source)
 
 if __name__ == '__main__': unittest.main()

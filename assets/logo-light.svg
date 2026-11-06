@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="aeroandroid">
+  <defs>
+    <linearGradient id="sky" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#2463eb"/><stop offset="1" stop-color="#1ed6aa"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="150" y1="330" x2="710" y2="710">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="228" fill="url(#sky)"/>
+  <rect x="100" y="100" width="824" height="824" rx="228" fill="url(#glow)"/>
+  <g fill="url(#ink)">
+    <circle cx="520" cy="520" r="148" fill="none" stroke="url(#ink)" stroke-width="84" stroke-opacity="0.97"/>
+    <rect x="624" y="330" width="86" height="380" rx="43" fill-opacity="0.97"/>
+    <rect x="190" y="410" width="128" height="34" rx="17" fill-opacity="0.55"/>
+    <rect x="150" y="503" width="168" height="34" rx="17" fill-opacity="0.8"/>
+    <rect x="230" y="596" width="88" height="34" rx="17" fill-opacity="0.45"/>
+  </g>
+</svg>

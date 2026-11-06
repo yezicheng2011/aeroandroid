@@ -1,12 +1,12 @@
-# Android 16 · Magisk Root and microG Setup
+# Android 17 · Magisk Root and microG Setup
 
-The installer default is the full edition on Android 17 (Magisk v31.0, pinned in `runtime-lock-17.json`). This note is the Android 16 procedure: `./build.sh --android 16` uses Magisk v30.7 from `runtime-lock.json`. `./build.sh --pure` skips Magisk and microG; `--with-gpl` is an alias of the default full edition. Neither edition installs GApps or proprietary Google system components. See the [microG notes](MICROG.md) for microG capabilities, self-check and commercial distribution caveats.
+The installer default is the full edition on Android 17 (Magisk v31.0, pinned in `runtime-lock.json`). `./build.sh --pure` skips Magisk and microG; `--with-gpl` is an alias of the default full edition. Neither edition installs GApps or proprietary Google system components. See the [microG notes](MICROG.md) for microG capabilities, self-check and commercial distribution caveats.
 
 ## Magisk implementation
 
-1. Boot this project's pure AOSP AVD and confirm API 36 / ARM64 and AVD ownership.
-2. Inside the Guest, patch the ramdisk with Magisk v30.7's official `host_patch.sh`; the script and its license are kept in `third_party/Magisk`.
-3. Save a private `images/16/default/ramdisk.magisk.img`, record the SHA256 of the original, the patched image and the Magisk APK, and bind it to `image_tag=default`. The original SDK ramdisk is not rewritten, and the patched ramdisk from the old Google image is never reused.
+1. Boot this project's pure AOSP AVD and confirm API 37, the image for your chip (ARM64 or x86_64) and AVD ownership.
+2. Inside the Guest, patch the ramdisk with Magisk v31.0's official `host_patch.sh`; the script and its license are kept in `third_party/Magisk`.
+3. Save a private `images/17/default/ramdisk.magisk.img`, record the SHA256 of the original, the patched image and the Magisk APK, and bind it to `image_tag=default`. The original SDK ramdisk is not rewritten, and the patched ramdisk from the old Google image is never reused.
 4. Cold-boot with that ramdisk and the parameters used by Magisk's official AVD test specified explicitly.
 5. Verify Magisk, su and the manager app, then restore ADB as the shell UID so the graphics service keeps its permission ownership.
 6. In the microG stage, enable Zygisk, install the official Vector and our own system module, check the enabled state, scope and Android's actual signature queries, then restore the ADB shell.
@@ -44,6 +44,6 @@ Rollback stops the subsystem and removes the boot override; it does not delete t
 - The automated microG signature check and the UI Self-Check pass before testing the apps you need.
 - After root and microG setup, multi-window graphics, IME, focus and notifications still work.
 
-Android 17 uses Magisk v31.0 (runtime-lock-17.json); Intel Macs use the -x86_64 locks. Neither has had a root / microG acceptance run on real hardware yet.
+Magisk v31.0 is pinned in `runtime-lock.json` (`runtime-lock-x86_64.json` on Intel Macs). Neither has had a root / microG acceptance run on real hardware yet.
 
-Sources: [Magisk v30.7 host_patch.sh](https://github.com/topjohnwu/Magisk/blob/v30.7/scripts/host_patch.sh), [official AVD test script](https://github.com/topjohnwu/Magisk/blob/v30.7/scripts/avd.sh).
+Sources: [Magisk v31.0 host_patch.sh](https://github.com/topjohnwu/Magisk/blob/v31.0/scripts/host_patch.sh), [official AVD test script](https://github.com/topjohnwu/Magisk/blob/v31.0/scripts/avd.sh).

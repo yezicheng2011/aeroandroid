@@ -46,10 +46,10 @@ def good_probe():
 
 
 class FakeController:
-    api = 36
+    api = 37
     arch = 'arm64'
     image_tag = 'default'
-    config = {'android': 16}
+    config = {'android': 17}
 
     def __init__(self, root):
         self.root = Path(root)

@@ -27,6 +27,7 @@ COMPANION = "dev.dan.androidsubsystem"
 AUTHORITY = COMPANION + ".bridge"
 DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
             "resolution": "1280x960/200", "fps": 30, "bitrate": "12M", "gpu": "auto"}
+RETIRED_ANDROID = (16,)   # no longer offered; a saved config that still names one is upgraded by migrate_legacy()
 
 
 class SubsystemError(Exception):
@@ -46,6 +47,15 @@ def host_arch():
     except (OSError, subprocess.SubprocessError):
         out = ""
     return "arm64" if out.strip() == "1" else "x86_64"
+
+
+def env_int(name, default):
+    """A positive whole number from the environment, or `default` when it is unset or not one."""
+    try:
+        value = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def atomic_json(path: Path, value):
@@ -119,7 +129,7 @@ class Controller:
         self.runner = runner or subprocess.run
         self.arch = host_arch()   # which system image and emulator build this Mac runs
         # A cold boot can be slow on an older Intel Mac, so the wait is adjustable.
-        self.boot_timeout = int(os.environ.get("ANDROID_SUBSYSTEM_BOOT_TIMEOUT") or (240 if self.arch == "arm64" else 480))
+        self.boot_timeout = env_int("ANDROID_SUBSYSTEM_BOOT_TIMEOUT", 240 if self.arch == "arm64" else 480)
         # Quick Boot snapshots are for everyday use only. Provisioning builds a Controller
         # directly and always cold boots, because Magisk modules apply at boot.
         self.quick_boot = False
@@ -133,18 +143,18 @@ class Controller:
         self.avd_home.mkdir(exist_ok=True)
         runtime = self.root / "runtime"
         java_home = self.config.get("java_home", os.environ.get("JAVA_HOME", ""))
+        path = [str(runtime / "bin"), str(Path(java_home) / "bin") if java_home else "", str(self.sdk / "platform-tools"),
+                "/opt/homebrew/bin", "/usr/local/bin", os.environ.get("PATH", "")]
         self.env = {**os.environ, "ANDROID_HOME": str(self.sdk),
                     "ANDROID_SDK_ROOT": str(self.sdk), "ANDROID_AVD_HOME": str(self.avd_home),
-                    "PATH": os.pathsep.join([str(runtime / "bin"), str(Path(java_home) / "bin") if java_home else "",
-                     str(self.sdk / "platform-tools"),
-                     "/opt/homebrew/bin", "/usr/local/bin", os.environ.get("PATH", "")])}
+                    "PATH": os.pathsep.join(p for p in path if p)}   # an empty entry would put the current folder on PATH
         if java_home:
             self.env["JAVA_HOME"] = java_home
 
     @staticmethod
     def validate_config(c):
-        if c.get("android") not in (16, 17):
-            raise SubsystemError("Only Android 16 and 17 are supported")
+        if c.get("android") not in (DEFAULTS["android"], *RETIRED_ANDROID):   # a retired one still loads, to be upgraded
+            raise SubsystemError(f"Only Android {DEFAULTS['android']} is supported")
         if c.get("image_tag", "default") not in ("default", "google_apis"):
             raise SubsystemError("Unknown Android system image type")
         if type(c.get("port")) is not int or c["port"] % 2 or not 5554 <= c["port"] <= 5680:
@@ -170,27 +180,34 @@ class Controller:
     def image_api(self):
         return image_folder(self.config["android"])
 
-    def migrate_legacy(self):
-        """Move an install from before the AOSP runtime onto the current one.
+    @property
+    def outdated(self):
+        """True for an install from before the current runtime: the old Google image, or the retired Android 16."""
+        return self.image_tag != "default" or self.config["android"] != DEFAULTS["android"]
 
-        Such an install has a config without `image_tag` (and often "android": 16, the old default) plus a
-        device built from Google's old Google APIs image. Its data stays untouched as a backup: the AOSP runtime
-        uses its own device. This switches to the newest AOSP image the installer has put in the SDK, or says
-        plainly that the installer has to run first."""
+    def migrate_legacy(self):
+        """Move an outdated install onto the current runtime (Android 17, AOSP image).
+
+        Such an install is the old Google-image setup (a config without `image_tag`) or the retired Android 16.
+        Its device and data stay untouched as a backup: the current runtime uses its own device. This switches
+        to Android 17 once the installer has put its image in the SDK, or says plainly that the installer has
+        to run first."""
         if self.running_emulator() or self.unconfirmed_shutdown():
             raise SubsystemError("The old Android is still running. Stop it, then start again.", code="shutdown_unconfirmed")
-        for android in (DEFAULTS["android"], 16):
-            if (self.sdk / f"system-images/android-{image_folder(android)}/default/{self.abi}/system.img").is_file():
-                config = {**self.config, "android": android, "image_tag": "default"}
-                config.pop("magisk_ramdisk", None)   # it was patched from the old image
-                atomic_json(self.root / "config.json", config)
-                self.config = config
-                return
-        raise SubsystemError("This Mac still has the old Google-image setup, and the current Android runtime is not installed yet. "
+        android = DEFAULTS["android"]
+        if (self.sdk / f"system-images/android-{image_folder(android)}/default/{self.abi}/system.img").is_file():
+            config = {**self.config, "android": android, "image_tag": "default"}
+            config.pop("magisk_ramdisk", None)   # it was patched from the old image
+            atomic_json(self.root / "config.json", config)
+            self.config = config
+            return
+        raise SubsystemError(f"This Mac still has an older Android setup, and Android {android} is not installed yet. "
                              "Run the installer once to upgrade (open the DMG and run \"Install aeroandroid\"). "
                              "Your old apps and data are kept as a backup.", code="runtime_upgrade_needed")
 
     def loaded_config(self, saved):
+        if not isinstance(saved, dict):
+            raise SubsystemError(f"Cannot read {self.root / 'config.json'}: expected a JSON object")
         config = {**DEFAULTS, **saved}
         # Existing installations must remain identifiable so they can be stopped
         # safely before migration. New installations always select AOSP.
@@ -238,7 +255,7 @@ class Controller:
                 p = prefix / f"share/android-commandlinetools/cmdline-tools/latest/bin/{name}"
                 if p.is_file():
                     return str(p)
-        raise SubsystemError(f"Missing {name}. Run scripts/setup-mac.sh first.")
+        raise SubsystemError(f"Missing {name}. Run the installer again (open the DMG and run \"Install aeroandroid\").")
 
     def run(self, argv, timeout=30, check=True, input=None):
         try:
@@ -338,9 +355,9 @@ class Controller:
                 checks.append({"name": name, "ok": True, "detail": p})
             except SubsystemError as e:
                 checks.append({"name": name, "ok": False, "detail": str(e)})
-        image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
-        checks.append({"name": f"Android {self.config['android']} {self.abi} image", "ok": image.exists(),
-                      "detail": str(image)})
+        android = DEFAULTS["android"]   # the runtime this app runs, also when an older install still has to be upgraded
+        image = self.sdk / f"system-images/android-{image_folder(android)}/default/{self.abi}/system.img"
+        checks.append({"name": f"Android {android} {self.abi} image", "ok": image.exists(), "detail": str(image)})
         try:
             if self.device():   # which app CPU types Android runs: an Intel Mac needs ARM translation for arm64-only apps
                 abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip()
@@ -365,12 +382,11 @@ class Controller:
         with self.locked():
             if self.running_emulator() or self.device() or self.unconfirmed_shutdown():
                 raise SubsystemError("Stop Android before changing runtime settings")
-            candidate = {**self.config, **changes}
-            if candidate["image_tag"] != "default":
+            if self.outdated:
                 self.migrate_legacy()
-                candidate = {**self.config, **changes}
-            if candidate["android"] != self.config["android"] or candidate["image_tag"] != self.image_tag:
-                candidate.pop("magisk_ramdisk", None)
+            candidate = {**self.config, **changes}
+            if candidate["android"] != DEFAULTS["android"] or candidate["image_tag"] != "default":
+                raise SubsystemError(f"Only Android {DEFAULTS['android']} (AOSP image) is supported")
             self.validate_config(candidate)
             for field in ("sdk", "java_home"):
                 if field in candidate and not Path(candidate[field]).is_absolute():
@@ -381,13 +397,14 @@ class Controller:
 
     def create(self):
         with self.locked():
-            if self.image_tag != "default":
+            if self.outdated:
                 self.migrate_legacy()
             if self.configured():
                 return {"avd": self.avd, "created": False}
             image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
             if not image.is_file():
-                raise SubsystemError(f"Android {self.config['android']} image missing. Run setup-mac.sh {self.config['android']}")
+                raise SubsystemError(f"The Android {self.config['android']} image is missing. "
+                                     "Run the installer again (open the DMG and run \"Install aeroandroid\").")
             self.run([self.tool("avdmanager"), "--verbose", "create", "avd", "--name", self.avd,
                       "--package", f"system-images;android-{self.image_api};{self.image_tag};{self.abi}",
                       "--path", str(self.avd_home / f"{self.avd}.avd")], timeout=90, input="no\n")
@@ -418,6 +435,13 @@ class Controller:
         return (r.returncode == 0 and len(fields) == 2 and not fields[1].startswith("Z")
                 and fields[0].strip() == record.get("birth"))
 
+    def log_tail(self, name, limit=1500):
+        """The end of one of our log files, for an error message."""
+        try:
+            return (self.logs / name).read_text(errors="replace")[-limit:].strip()
+        except OSError:
+            return ""
+
     def spawn(self, argv, log_name):
         log = self.logs / log_name
         with log.open("ab", buffering=0) as f:
@@ -429,7 +453,7 @@ class Controller:
             if p.poll() is not None:
                 break
         if p.poll() is not None:
-            raise SubsystemError(f"Runtime exited ({p.returncode}). {log.read_text(errors='replace')[-3000:]}")
+            raise SubsystemError(f"Runtime exited ({p.returncode}). {self.log_tail(log_name, 3000)}")
         birth = self.run(["/bin/ps", "-p", str(p.pid), "-o", "lstart="], check=False)
         if birth.returncode or not birth.stdout.strip():
             raise SubsystemError("Could not establish runtime process identity")
@@ -468,7 +492,7 @@ class Controller:
                 if self.device() and self.adb("shell", "getprop", "sys.boot_completed", check=False).stdout.strip() == "1":
                     break
                 if not self.running_emulator() and not self.device():
-                    raise SubsystemError("Emulator stopped during boot; inspect emulator.log")
+                    raise SubsystemError("Android stopped while starting. " + self.log_tail("emulator.log"))
                 time.sleep(1)
             else:
                 raise SubsystemError(f"Boot exceeded {self.boot_timeout} seconds; emulator left running for diagnosis "
@@ -497,8 +521,8 @@ class Controller:
             error = None
         except SubsystemError as e:
             state, error = "unavailable", str(e)
-        return {"state": state, "error": error, "android": self.config["android"],
-                "serial": self.serial, "configured": self.configured(),
+        return {"state": state, "error": error, "android": DEFAULTS["android"], "upgrade_needed": self.outdated,
+                "serial": self.serial, "configured": self.configured() and not self.outdated,
                 "runtime_process_active": self.running_emulator(),
                 "windows": self.windows(), "config": self.config, "logs": str(self.logs),
                 "provision": read_json(self.root / "provision-report.json", {})}
@@ -556,8 +580,9 @@ class Controller:
         with self.locked():
             token_path = self.root / "surface-token"
             if not token_path.exists():
-                token_path.write_text(uuid.uuid4().hex + uuid.uuid4().hex)
-                os.chmod(token_path, 0o600)
+                # Created private from the start: the token is what lets a client use the graphics port.
+                with os.fdopen(os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+                    f.write(uuid.uuid4().hex + uuid.uuid4().hex)
             record = read_json(self.root / "graphics.json", {})
             forwards = self.adb("forward", "--list", check=False).stdout.splitlines()
             forward_line = f"{self.serial} tcp:{record.get('port')} tcp:7900"
@@ -681,14 +706,16 @@ class Controller:
         self.boot()
         with self.locked():
             args = ["install", "-r", str(paths[0])] if len(paths) == 1 else ["install-multiple", "-r", *map(str, paths)]
-            result = self.adb(*args, timeout=240)
-            if "NO_MATCHING_ABIS" in result.stdout:
+            # adb reports a failed install with a non-zero exit code and the reason on stderr.
+            result = self.adb(*args, timeout=240, check=False)
+            output = f"{result.stdout}\n{result.stderr}".strip()
+            if "NO_MATCHING_ABIS" in output:
                 abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip() or self.abi
                 raise SubsystemError(f"This app's native code does not match the CPU types of this Android system ({abis}). "
                                      "An Intel Mac needs ARM translation to run apps built only for arm64 (many games): rebuild with ./build.sh "
                                      "(not --pure or --no-arm-translation), or run scripts/provision-arm-translation.py.")
-            if "Success" not in result.stdout:
-                raise SubsystemError(result.stdout or "APK installation failed")
+            if result.returncode or "Success" not in result.stdout:
+                raise SubsystemError(output[-2000:] or "APK installation failed")
             return {"installed": [p.name for p in paths]}
 
     def uninstall(self, package):
@@ -764,7 +791,7 @@ class Controller:
         """Package name and label of an APK (the first split that is launchable), via aapt2."""
         tools = sorted(self.sdk.glob("build-tools/*/aapt2"))
         if not tools:
-            raise SubsystemError("Missing aapt2. Run scripts/setup-mac.sh first.")
+            raise SubsystemError("Missing aapt2. Run the installer again (open the DMG and run \"Install aeroandroid\").")
         for path in files:
             out = self.run([str(tools[-1]), "dump", "badging", str(path)], timeout=60, check=False).stdout
             package = re.search(r"^package: name='([^']+)'", out, re.MULTILINE)
@@ -793,14 +820,17 @@ class Controller:
         folder = Path(destination).expanduser().resolve()
         folder.mkdir(parents=True, exist_ok=True)
         safe = re.sub(r"[^\w .-]", "_", label, flags=re.UNICODE).strip(" .")[:60] or package
-        target = folder / f"{safe}.app"
-        if target.exists():
-            existing = {}
-            with contextlib.suppress(OSError, ValueError, plistlib.InvalidFileException):
-                existing = plistlib.loads((target / "Contents/Info.plist").read_bytes())
-            if not replace or existing.get("AndroidPackage") != package:
-                raise SubsystemError("This launcher already exists")
-            shutil.rmtree(target)
+        # Two different apps can share a name: the second one is told apart by the end of its package name.
+        for target in (folder / f"{safe}.app", folder / f"{safe} ({package.rsplit('.', 1)[-1]}).app"):
+            if not target.exists():
+                break
+            if read_plist(target / "Contents/Info.plist").get("AndroidPackage") == package:
+                if not replace:
+                    raise SubsystemError("This launcher already exists")
+                shutil.rmtree(target)
+                break
+        else:
+            raise SubsystemError(f"A different app named {target.name} already exists in {folder}")
         icon = icns_from_png(self.app_icon(package))
         contents = target / "Contents"
         (contents / "MacOS").mkdir(parents=True)
@@ -842,14 +872,18 @@ class Controller:
             if info.get("CFBundleShortVersionString") == version:
                 continue
             fresh = bundle / "Contents/MacOS/.AndroidSubsystem.new"
-            shutil.copy2(binary, fresh)
-            os.replace(fresh, bundle / "Contents/MacOS/AndroidSubsystem")
-            for key in ("CFBundleShortVersionString", "CFBundleVersion", "NSHumanReadableCopyright"):
-                if key in manager:
-                    info[key] = manager[key]
-            with (bundle / "Contents/Info.plist").open("wb") as f:
-                plistlib.dump(info, f)
-            self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(bundle)])
+            try:   # one launcher that cannot be updated must not stop the others
+                shutil.copy2(binary, fresh)
+                os.replace(fresh, bundle / "Contents/MacOS/AndroidSubsystem")
+                for key in ("CFBundleShortVersionString", "CFBundleVersion", "NSHumanReadableCopyright"):
+                    if key in manager:
+                        info[key] = manager[key]
+                with (bundle / "Contents/Info.plist").open("wb") as f:
+                    plistlib.dump(info, f)
+                self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(bundle)])
+            except (OSError, SubsystemError):
+                fresh.unlink(missing_ok=True)
+                continue
             refreshed.append(bundle.name)
         return {"refreshed": refreshed}
 

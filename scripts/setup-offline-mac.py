@@ -43,7 +43,7 @@ def package_records(cache, lock):
         if not entry.get('package'): continue
         catalog = 'images2-3.xml' if entry['package'].startswith('system-images;') else 'repository2-3.xml'
         if catalog not in documents:
-            documents[catalog] = minidom.parse(str(cache / 'android16-macos' / catalog))
+            documents[catalog] = minidom.parse(str(cache / 'sdk-macos' / catalog))
         document = documents[catalog]
         selected = None
         for package in document.getElementsByTagName('remotePackage'):
@@ -160,20 +160,32 @@ def runtime_installed(root, lock):
             (root / 'sdk/emulator/emulator').exists() and (root / 'runtime/bin/scrcpy').exists())
 
 
-def retire_legacy_google_image(root):
-    """Remove only our obsolete Google SDK image after AOSP provisioning succeeds.
+# System images of runtimes this app no longer uses: the old Google APIs image and Android 16 (android-36).
+OLD_IMAGES = ('google_apis/arm64-v8a', 'default/arm64-v8a', 'default/x86_64')
 
-    The old AVD's application data remains available as an offline backup.
+
+def retire_old_images(root):
+    """Remove only our obsolete SDK images after the current runtime is provisioned.
+
+    The AVDs built from them keep their apps and data as an offline backup.
     Never follow a redirected SDK path outside this private installation.
     """
     root = root.resolve()
-    legacy = root / 'sdk/system-images/android-36/google_apis/arm64-v8a'
-    if not legacy.exists():
-        return
-    if legacy.is_symlink() or not legacy.resolve().is_relative_to(root):
-        raise RuntimeError('Legacy SDK image path is redirected; refusing cleanup')
-    shutil.rmtree(legacy)
-    print('Removed the old Google APIs system image. The previous Android user data is kept as an offline backup.')
+    removed = False
+    for leaf in OLD_IMAGES:
+        image = root / 'sdk/system-images/android-36' / leaf
+        if not image.exists() and not image.is_symlink():
+            continue
+        if image.is_symlink() or not image.resolve().is_relative_to(root):
+            raise RuntimeError('Old SDK image path is redirected; refusing cleanup')
+        shutil.rmtree(image)
+        removed = True
+    if removed:
+        backups = sorted(p.name for p in (root / 'avd').glob('MacAndroid_*.avd') if not p.name.startswith('MacAndroid_17_'))
+        print('Removed the old Android system images (Android 16 and the Google APIs image).')
+        if backups:
+            print(f'Your previous apps and data are kept as a backup in {root / "avd"}: {", ".join(backups)}. '
+                  'Delete them to free disk space once you no longer need them.')
 
 
 def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=False):
@@ -187,7 +199,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         if not archive.is_file(): raise RuntimeError(f'Missing runtime archive: {archive}')
         print('Checking:', archive.name, flush=True)
         if sha256(archive) != entry['sha256']: raise RuntimeError(f'Checksum mismatch: {archive.name}')
-    metadata = ET.parse(cache / 'android16-macos/repository2-3.xml').getroot()
+    metadata = ET.parse(cache / 'sdk-macos/repository2-3.xml').getroot()
     license_node = next(x for x in metadata.findall('license') if x.get('id') == 'android-sdk-license')
     license_text = license_node.text.strip()
     license_file = root / 'ANDROID-SDK-LICENSE.txt'
@@ -235,11 +247,13 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
     java_home = next((runtime / 'java').glob('*/Contents/Home'))
     config_path = root / 'config.json'
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
-    if config.get('image_tag') != 'default':
-        config.pop('magisk_ramdisk', None)
+    if config.get('image_tag') != 'default' or config.get('android') != lock['android']:
+        config.pop('magisk_ramdisk', None)   # it was patched from the image of an older runtime
     config.update({'android': lock['android'], 'image_tag': 'default', 'sdk': str(sdk), 'java_home': str(java_home)})
-    config_path.write_text(json.dumps(config, indent=2))
-    config_path.chmod(0o600)
+    pending = config_path.with_name('config.json.pending')   # replace in one step: a crash must not leave a torn file
+    pending.write_text(json.dumps(config, indent=2))
+    pending.chmod(0o600)
+    pending.replace(config_path)
     env = {**os.environ, 'JAVA_HOME': str(java_home), 'ANDROID_SUBSYSTEM_SDK': str(sdk),
            'ANDROID_SUBSYSTEM_HOME': str(root), 'PYTHON': sys.executable,
            'PATH': str(runtime / 'python/bin') + ':' + str(runtime / 'bin') + ':' + str(java_home / 'bin') + ':' + os.environ.get('PATH', '')}
@@ -257,7 +271,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
                     print('Intel Mac: ARM translation was not installed; apps with only arm64 code will not run. '
                           'Retry: python3 scripts/provision-arm-translation.py runtime-cache')
             subprocess.run([sys.executable, str(PROJECT / 'scripts/preinstall-apps.py'), str(cache)], env=env, check=True)
-            retire_legacy_google_image(root)
+            retire_old_images(root)
         # Save a Quick Boot snapshot now so the first app you open starts in seconds. Only a speed-up.
         primed = subprocess.run([sys.executable, str(PROJECT / 'backend/subsystem.py'), 'prime'], env=env)
         if primed.returncode: print('Quick Boot snapshot was not saved; the first launch will be slower.')
@@ -296,5 +310,5 @@ def main():
 
 if __name__ == '__main__':
     try: main()
-    except (RuntimeError, OSError, subprocess.CalledProcessError, StopIteration) as e:
+    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError, StopIteration) as e:
         print('Install did not finish:', e, file=sys.stderr); sys.exit(1)

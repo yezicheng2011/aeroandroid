@@ -17,7 +17,6 @@
 ./build.sh --pure          # pure AOSP only: no Magisk, no microG, no pre-installed apps, no GPL-3.0 parts
 ./build.sh --with-gpl      # alias of the default full edition
 ./build.sh --mirror cn     # mainland China: GitHub via proxy, Android SDK via Tencent mirror
-./build.sh --android 16    # Android 16 instead of the default Android 17 (API 37)
 ./build.sh --no-arm-translation   # Intel Macs: skip ARM translation (saves a 2 GB download and 8 GB of disk)
 ./build.sh --check         # prerequisites only
 ./build.sh --download-only # only fill ./runtime-cache

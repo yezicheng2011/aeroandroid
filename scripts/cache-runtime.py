@@ -66,7 +66,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('cache', type=Path)
     parser.add_argument('--host', choices=['macosx', 'linux'], default='macosx')
-    parser.add_argument('--android', type=int, choices=[16, 17], default=17)
     parser.add_argument('--guest-only', action='store_true')
     args = parser.parse_args()
     args.cache.mkdir(parents=True, exist_ok=True)
@@ -76,11 +75,11 @@ def main():
     if not args.guest_only: packages += ['cmdline-tools;latest', 'platform-tools', 'emulator']
     entries = [choose(sdk, p, args.host) for p in packages]
     if not args.guest_only:
-        image = choose(images, f'system-images;android-{args.android+20};default;arm64-v8a', args.host)
+        image = choose(images, 'system-images;android-37.0;default;arm64-v8a', args.host)   # Android 17
         image['url'] = urllib.request.urljoin(BASE + 'sys-img/android/',
                                             next(p for p in images.findall('remotePackage') if p.get('path') == image['package']).findtext('archives/archive/complete/url'))
         entries.append(image)
-    manifest = {'android': args.android, 'host': args.host, 'archives': []}
+    manifest = {'android': 17, 'host': args.host, 'archives': []}
     # Save progress after every archive; interrupted downloads can safely resume on rerun.
     for entry in entries:
         manifest['archives'].append(download(entry, args.cache))

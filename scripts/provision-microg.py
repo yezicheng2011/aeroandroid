@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install pinned microG into this project's pure AOSP Android 16 or 17 AVD.
+"""Install pinned microG into this project's pure AOSP Android 17 AVD.
 
 No Google proprietary payload, account login, device registration, or push opt-in
 is performed. Package installation, framework configuration, and actual signature
@@ -38,8 +38,8 @@ HEX256 = re.compile(r'[0-9a-fA-F]{64}\Z')
 
 
 def require_aosp(controller):
-    if controller.config['android'] not in (16, 17) or controller.image_tag != 'default':
-        raise RuntimeError('microG requires the separate pure AOSP Android 16 or 17 default image; migrate first')
+    if controller.config['android'] != 17 or controller.image_tag != 'default':
+        raise RuntimeError('microG requires the separate pure AOSP Android 17 default image; migrate first')
 
 
 def parse_apk_permissions(output):
@@ -226,7 +226,7 @@ def check_installed_apk(controller, package, expected, directory):
 
 
 def configure_zygisk(controller, binary):
-    # Magisk v30.7 native/src/core/sqlite.cpp and db.rs define this schema/key.
+    # Magisk's native/src/core/sqlite.cpp and db.rs define this schema/key; the read-back below proves it on the pinned version.
     controller.adb('shell', binary, '--sqlite',
                    "INSERT OR REPLACE INTO settings (key,value) VALUES('zygisk',1)")
     output = controller.adb('shell', binary, '--sqlite', "SELECT value FROM settings WHERE key='zygisk'").stdout

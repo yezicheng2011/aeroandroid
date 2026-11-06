@@ -7,7 +7,6 @@ import shutil
 import signal
 import socket
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -60,16 +59,15 @@ class IntegrationTests(unittest.TestCase):
         for location in ['platform-tools/adb', 'emulator/emulator', 'cmdline-tools/latest/bin/avdmanager', 'cmdline-tools/latest/bin/sdkmanager', 'build-tools/36.0.0/aapt2']:
             tool = self.sdk / location; tool.parent.mkdir(parents=True, exist_ok=True)
             tool.write_bytes(self.fixture.read_bytes()); tool.chmod(0o755)
-        image = self.sdk / 'system-images/android-36/default/arm64-v8a/system.img'
+        image = self.sdk / 'system-images/android-37.0/default/arm64-v8a/system.img'
         image.parent.mkdir(parents=True); image.touch()
         scrcpy = self.root / 'scrcpy'; scrcpy.write_bytes(self.fixture.read_bytes()); scrcpy.chmod(0o755)
         self.environment = patch.dict(os.environ, {'ANDROID_SUBSYSTEM_SDK': str(self.sdk), 'TEST_RUNTIME_ROOT': str(self.root)})
         self.environment.start()
         self.mac = patch.object(subsystem.platform, 'system', return_value='Darwin'); self.mac.start()
         self.arm = patch.object(subsystem.platform, 'machine', return_value='arm64'); self.arm.start()
-        # The fixture SDK only has the Android 16 image; the product default is Android 17.
         (self.root / 'state').mkdir()
-        subsystem.atomic_json(self.root / 'state/config.json', {'android': 16, 'image_tag': 'default'})
+        subsystem.atomic_json(self.root / 'state/config.json', {'android': 17, 'image_tag': 'default'})
         self.controller = subsystem.Controller(self.root / 'state')
         actual_tool = self.controller.tool
         self.controller.tool = lambda name: str(scrcpy) if name == 'scrcpy' else actual_tool(name)
@@ -140,7 +138,14 @@ class IntegrationTests(unittest.TestCase):
         # Installing again (an update) refreshes the same app; a foreign folder is never overwritten.
         self.assertEqual(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'], str(launcher))
         with self.assertRaisesRegex(subsystem.SubsystemError, 'already exists'):
-            self.controller.export_launcher('com.example.other', 'Fixture App', str(app), str(apps), replace=True)
+            self.controller.export_launcher('com.example.fixture', 'Fixture App', str(app), str(apps))   # without replace=True
+        # A different app with the same name gets its own Mac app, told apart by its package name.
+        other = self.controller.export_launcher('com.example.other', 'Fixture App', str(app), str(apps))['launcher']
+        self.assertEqual(Path(other), apps / 'Fixture App (other).app')
+        self.assertEqual(self.controller.export_launcher('com.example.other', 'Fixture App', str(app), str(apps), replace=True)['launcher'], other)
+        self.assertEqual(plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())['AndroidPackage'], 'com.example.fixture')   # untouched
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'different app named'):
+            self.controller.export_launcher('org.example.other', 'Fixture App', str(app), str(apps), replace=True)
         with self.assertRaisesRegex(subsystem.SubsystemError, '512x512'):
             subsystem.icns_from_png(b'not a png')
         self.controller.stop()
@@ -252,7 +257,7 @@ class IntegrationTests(unittest.TestCase):
         import hashlib
         folder = self.controller.magisk_image_dir; folder.mkdir(parents=True)
         image = folder / 'ramdisk.magisk.img'; image.write_bytes(b'test private ramdisk')
-        subsystem.atomic_json(folder / 'ramdisk.json', {'api': 36, 'image_tag': 'default', 'sha256': hashlib.sha256(image.read_bytes()).hexdigest()})
+        subsystem.atomic_json(folder / 'ramdisk.json', {'api': 37, 'image_tag': 'default', 'sha256': hashlib.sha256(image.read_bytes()).hexdigest()})
         self.controller.configure({'magisk_ramdisk': str(image)})
         self.controller.boot()
         args = json.loads((self.root / 'emulator-argv.json').read_text())
@@ -265,7 +270,7 @@ class IntegrationTests(unittest.TestCase):
             self.controller.boot()
 
     def test_foreign_emulator_is_never_stopped(self):
-        (self.root / 'device.json').write_text(json.dumps({'avd': 'UserOwnedAVD', 'pid': 1, 'api': '36'}))
+        (self.root / 'device.json').write_text(json.dumps({'avd': 'UserOwnedAVD', 'pid': 1, 'api': '37'}))
         with self.assertRaisesRegex(subsystem.SubsystemError, 'another emulator'):
             self.controller.stop()
         self.assertTrue((self.root / 'device.json').exists())
@@ -289,15 +294,20 @@ class IntegrationTests(unittest.TestCase):
         self.controller.uninstall('com.example.first')
         self.controller.stop()
 
-    def test_version_switch_locked_while_running_and_no_downgrade(self):
+    def test_settings_are_locked_while_running_and_only_android_17_is_accepted(self):
         self.controller.boot()
         with self.assertRaisesRegex(subsystem.SubsystemError, 'Stop Android'):
-            self.controller.configure({'android': 17})
+            self.controller.configure({'memory_mb': 8192})
         self.controller.stop()
-        self.controller.configure({'android': 17})
-        with self.assertRaisesRegex(subsystem.SubsystemError, 'Android 17 image missing'):
-            self.controller.create()
+        for change in ({'android': 16}, {'android': 18}, {'image_tag': 'google_apis'}):
+            with self.assertRaisesRegex(subsystem.SubsystemError, 'Only Android 17'):
+                self.controller.configure(change)
         self.assertEqual(self.controller.config['android'], 17)
+
+    def test_a_missing_image_says_to_run_the_installer(self):
+        shutil.rmtree(self.sdk / 'system-images')
+        with self.assertRaisesRegex(subsystem.SubsystemError, r'Android 17 image is missing\. Run the installer again'):
+            self.controller.create()
 
     def test_invalid_inputs_and_pid_reuse(self):
         for value in ['com.example;touch /tmp/x', '--help', '', 'com.example\n']:
@@ -312,7 +322,7 @@ class IntegrationTests(unittest.TestCase):
     def test_wrong_android_api_rejected(self):
         self.controller.boot()
         path = self.root / 'device.json'; state = json.loads(path.read_text()); state['api'] = '35'; path.write_text(json.dumps(state))
-        with self.assertRaisesRegex(subsystem.SubsystemError, 'Expected Android API 36'):
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'Expected Android API 37'):
             self.controller.ready()
         self.controller.stop()
 
@@ -457,23 +467,56 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual((controller.image_tag, controller.avd), ('google_apis', 'MacAndroid_16_arm64'))
         return legacy, controller
 
-    def test_legacy_install_moves_to_the_installed_aosp_runtime_and_keeps_its_data(self):
+    def test_legacy_install_moves_to_android_17_and_keeps_its_data(self):
         legacy, controller = self.legacy_install()
         controller.boot()                              # used to fail: "Legacy Google image is retained only for migration"
-        self.assertEqual((controller.image_tag, controller.avd, controller.config['android']), ('default', 'MacAndroid_16_AOSP_arm64', 16))
+        self.assertEqual((controller.image_tag, controller.avd, controller.config['android']), ('default', 'MacAndroid_17_AOSP_arm64', 17))
+        self.assertEqual(controller.image_api, '37.0')
         self.assertEqual(controller.config['memory_mb'], 6144)          # their settings survive
         self.assertNotIn('magisk_ramdisk', controller.config)           # it was patched from the old image
         saved = json.loads((controller.root / 'config.json').read_text())
-        self.assertEqual(saved['image_tag'], 'default')
+        self.assertEqual((saved['image_tag'], saved['android']), ('default', 17))
         self.assertEqual(legacy.read_text(), 'path=preserved-old-data')  # the old device is a backup, untouched
         controller.stop()
 
-    def test_legacy_install_prefers_android_17_when_that_runtime_is_installed(self):
-        image = self.sdk / 'system-images/android-37.0/default/arm64-v8a/system.img'
-        image.parent.mkdir(parents=True); image.touch()
-        _legacy, controller = self.legacy_install()
-        controller.create()
-        self.assertEqual((controller.config['android'], controller.image_api), (17, '37.0'))
+    def android_16_install(self):
+        """A Mac that installed Android 16 before it was removed: an AOSP install whose saved version is 16."""
+        old = self.controller.avd_home / 'MacAndroid_16_AOSP_arm64.ini'
+        old.write_text('path=preserved-android-16-data')
+        subsystem.atomic_json(self.controller.root / 'config.json', {'android': 16, 'image_tag': 'default', 'memory_mb': 6144,
+                              'magisk_ramdisk': '/android16/ramdisk.img'})
+        controller = subsystem.Controller(self.controller.root)
+        self.assertEqual((controller.config['android'], controller.outdated), (16, True))   # it still loads, so it can be upgraded
+        return old, controller
+
+    def test_an_android_16_install_is_upgraded_to_17_and_keeps_its_data(self):
+        old, controller = self.android_16_install()
+        self.assertEqual((controller.status()['android'], controller.status()['upgrade_needed']), (17, True))   # the app never shows 16
+        controller.boot()
+        self.assertEqual((controller.config['android'], controller.avd, controller.outdated), (17, 'MacAndroid_17_AOSP_arm64', False))
+        self.assertEqual(controller.config['memory_mb'], 6144)
+        self.assertNotIn('magisk_ramdisk', controller.config)            # it was patched from the Android 16 image
+        self.assertEqual(old.read_text(), 'path=preserved-android-16-data')
+        self.assertFalse(controller.status()['upgrade_needed'])
+        controller.stop()
+
+    def test_an_android_16_install_without_the_android_17_image_says_what_to_do(self):
+        shutil.rmtree(self.sdk / 'system-images')
+        _old, controller = self.android_16_install()
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'Android 17 is not installed yet') as caught:
+            controller.boot()
+        self.assertEqual(caught.exception.code, 'runtime_upgrade_needed')
+        self.assertEqual(controller.config['android'], 16)               # nothing was changed
+        self.assertTrue(any(c['name'] == 'Android 17 arm64-v8a image' and not c['ok'] for c in controller.diagnostic()['checks']))
+
+    def test_an_android_16_install_can_still_be_stopped_before_the_upgrade(self):
+        _old, controller = self.android_16_install()
+        self.assertEqual(controller.stop()['state'], 'stopped')           # scripts/prepare-runtime-migration.py relies on this
+
+    def test_saving_settings_on_an_android_16_install_upgrades_it_too(self):
+        _old, controller = self.android_16_install()
+        controller.configure({'memory_mb': 8192})
+        self.assertEqual((controller.config['android'], controller.config['memory_mb']), (17, 8192))
 
     def test_legacy_install_without_the_new_runtime_says_what_to_do(self):
         shutil.rmtree(self.sdk / 'system-images')
@@ -499,7 +542,7 @@ class IntegrationTests(unittest.TestCase):
     def test_the_manual_migration_still_works(self):
         _legacy, controller = self.legacy_install()
         controller.configure({'image_tag': 'default'})
-        self.assertEqual((controller.avd, controller.config['memory_mb']), ('MacAndroid_16_AOSP_arm64', 6144))
+        self.assertEqual((controller.avd, controller.config['memory_mb']), ('MacAndroid_17_AOSP_arm64', 6144))
         self.assertNotIn('magisk_ramdisk', controller.config)
 
 

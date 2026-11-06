@@ -40,21 +40,40 @@ class BuildScriptTests(unittest.TestCase):
         self.assertIn('Checking prerequisites', out); self.assertNoShellError(out, err)
 
     def test_every_option_is_accepted_and_bad_ones_are_refused(self):
-        for options in (['--android', '16'], ['--android=17'], ['--pure'], ['--no-arm-translation'], ['--mirror', 'cn'],
+        for options in (['--android', '17'], ['--android=17'], ['--pure'], ['--no-arm-translation'], ['--mirror', 'cn'],
                         ['--pure', '--no-arm-translation', '--android', '17', '--mirror', 'global']):
             _code, out, err = run(*options, '--check')
             self.assertIn('Checking prerequisites', out, options); self.assertNoShellError(out, err)
-        code, _out, err = run('--android', '99', '--check')
-        self.assertEqual(code, 2); self.assertIn('--android must be 16 or 17', err)
+        for version in ('16', '99'):                  # Android 16 was removed: Android 17 is the only version
+            code, _out, err = run('--android', version, '--check')
+            self.assertEqual(code, 2); self.assertIn(f'Android {version} is no longer supported', err)
         self.assertEqual(run('--bogus')[0], 2)
         self.assertEqual(run('--mirror', 'mars', '--check')[0], 2)
 
-    def test_it_exports_the_lock_for_the_chip_and_android_version(self):
-        expected = {('arm64', '17'): 'runtime-lock-17.json', ('arm64', '16'): 'runtime-lock.json',
-                    ('x86_64', '17'): 'runtime-lock-17-x86_64.json', ('x86_64', '16'): 'runtime-lock-x86_64.json'}
-        for (arch, android), name in expected.items():
-            _code, _out, err = run('--android', android, '--check', arch=arch)
-            self.assertIn(f"ANDROID_SUBSYSTEM_LOCK={ROOT}/scripts/{name} ", err + ' ', (arch, android))
+    def test_it_exports_the_lock_for_the_chip(self):
+        expected = {'arm64': 'runtime-lock.json', 'x86_64': 'runtime-lock-x86_64.json'}
+        for arch, name in expected.items():
+            _code, _out, err = run('--check', arch=arch)
+            self.assertIn(f"ANDROID_SUBSYSTEM_LOCK={ROOT}/scripts/{name} ", err + ' ', arch)
+
+    def test_an_old_cache_is_reused_under_its_new_name_and_loses_the_android_16_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder)
+            old = cache / 'android16-macos'; old.mkdir()
+            for name in ('platform-36_r02.zip', 'arm64-v8a-36_r02.zip', 'emulator-darwin_aarch64-16428233.zip', 'repository2-3.xml'):
+                (old / name).write_text(name)
+            (cache / 'android17-macos').mkdir()
+            (cache / 'android17-macos/kept.zip').write_text('the Android 17 downloads are not touched')
+            migrate = f'source "{ROOT}/scripts/host.sh"; migrate_old_cache "{cache}" "{ROOT}/scripts/runtime-lock.json"'
+            for _ in range(2):                                      # the second run has nothing left to do
+                subprocess.run(['bash', '-c', migrate], check=True, env={**os.environ, 'project_root': str(ROOT)})
+            self.assertFalse(old.exists())
+            self.assertEqual(sorted(p.name for p in (cache / 'sdk-macos').iterdir()), ['platform-36_r02.zip', 'repository2-3.xml'])
+            self.assertTrue((cache / 'android17-macos/kept.zip').exists())
+            # A cache that already has the new folder is left exactly as it is.
+            (cache / 'android16-macos').mkdir(); (cache / 'android16-macos/other.zip').write_text('x')
+            subprocess.run(['bash', '-c', migrate], check=True, env={**os.environ, 'project_root': str(ROOT)})
+            self.assertTrue((cache / 'android16-macos/other.zip').exists())
 
     def test_the_arm_translation_switch_reaches_the_installer(self):
         _c, _o, err = run('--no-arm-translation', '--check', arch='x86_64')

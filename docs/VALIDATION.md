@@ -8,10 +8,10 @@ This record distinguishes controlled tests, a real Android Guest, and real macOS
 | Ports and shutdown handling after memory changes | Controlled checks passed | Real TCP on Linux reproducing TIME_WAIT; verified rejection of live listeners, whole-port-pair selection, locking when the old instance hasn't confirmed exit, delayed ADB exit, and the new memory launch parameters; not verified on a Mac |
 | Java → Swift frame protocol interop | Passed | Java actually generates RGBA packets, Swift actually compiles and decodes them; includes 7 invalid-frame rejection checks |
 | Native Mac source syntax | Passed | Parsed with the official Swift 6.2 compiler; no macOS SDK type checking or linking |
-| Android 16 Guest bridge APK | Build, signing and verification passed | Real Android SDK API 36, Java, D8, aapt2, apksigner |
+| Guest bridge APK | Build, signing and verification passed | Real Android SDK platform 36 (the build target), Java, D8, aapt2, apksigner |
 | Offline SDK install-record fix | Passed | cmdline-tools 23.0 Java libraries of the same version; reproduced the missing-emulator error, and after adding package.xml for the six pinned packages, both list_installed and AVD creation passed; VM not booted |
 | Install script exit handling on Bash 3.2 | Passed | Official GNU Bash 3.2; exit codes 0 / 1 / 42 preserved under three locales, Chinese output and log paths correct; still needs re-verification on a Mac |
-| Real Android 16 x86_64 Guest | Booted; testing stopped at the user's request | API 36, bridge APK installed, SurfaceServer ready, real VirtualDisplay created; no passing frame-capture report yet |
+| Earlier Android 16 x86_64 Guest (Android 16 has since been removed) | Booted; testing stopped at the user's request | API 36, bridge APK installed, SurfaceServer ready, real VirtualDisplay created; no passing frame-capture report yet |
 | Real Android Surface / input / dual-display test | Pending | Uses tests/guest_smoke.py; results will be saved separately |
 | SwiftUI / Metal build and display on the M5 | Old version reported working by the user | User reported it runs normally after the gray-screen patch; the new pure AOSP image and microG still need re-acceptance on the M5 |
 | microG, GSFProxy, signature-compatibility APK and Vector archives | Host checks passed | Pinned SHA256; real aapt2 package names, manifest permissions, versions and apksigner signature verification; Vector module id and official CLI data format cross-checked. Signature hook not run in the Guest |

@@ -18,10 +18,8 @@ sdk_mirror="${SDK_MIRROR:-https://mirrors.cloud.tencent.com/AndroidSDK/}"
 google_base="https://dl.google.com/android/repository/"
 gpl_source_url="https://aeroandroid.com/releases/AndroidSubsystem-source.zip"
 gpl_source_sha256="6129306d2423245f7dc74906f3a39d51927934f7e845b2d050c5698f34d39ade"
-magisk_patch_url="https://raw.githubusercontent.com/topjohnwu/Magisk/v30.7/scripts/host_patch.sh"
+magisk_patch_url="https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/scripts/host_patch.sh"
 magisk_patch_sha256="1720669a684f75fe90a7318868dd4528f2e736a5ad5363f92a3c51c848d79703"
-
-original_args=("$@")
 
 usage() {
   cat <<'USAGE'
@@ -29,9 +27,7 @@ Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
                            Tencent Android SDK mirror. Default: auto (probe).
-  --android 16|17          Android version (default 17). If the Android 17 install
-                           fails, you are offered a retry on Android 16.
-  --pure                   Install the pure AOSP edition only: no Magisk, no microG,
+  --pure                  Install the pure AOSP edition only: no Magisk, no microG,
                            no GPL-3.0 parts.
   (default)                Full edition: AOSP + Magisk + microG, which also fetches
                            the GPL-3.0 parts (microG signature module, Magisk
@@ -62,9 +58,9 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
-[[ -n "${AEROANDROID_FORCE_ANDROID:-}" ]] && android="$AEROANDROID_FORCE_ANDROID"   # set by the fallback below
-case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
-lock_file="$(lock_for "$android")"
+# Android 17 is the only version. --android stays accepted so that old command lines keep working.
+[[ "$android" == 17 ]] || { echo "Android $android is no longer supported: aeroandroid runs Android 17." >&2; exit 2; }
+lock_file="$(lock_for)"
 export ANDROID_SUBSYSTEM_LOCK="$lock_file" AEROANDROID_ARM_TRANSLATION="$arm_translation"
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
@@ -134,6 +130,7 @@ fetch() { # url dest sha256
 fetch_runtime() {
   say "Downloading runtime into $cache"
   local lock="$lock_file"
+  migrate_old_cache "$cache" "$lock"
   local line url rel sha
   while IFS=$'\t' read -r url rel sha; do
     line="$rel"; fetch "$url" "$cache/$line" "$sha"
@@ -152,8 +149,8 @@ PY
   # SDK catalogs are read by setup-offline-mac.py; they are unsigned metadata.
   for cat in repository2-3.xml:repository2-3.xml sys-img/android/sys-img2-3.xml:images2-3.xml; do
     local src="${cat%%:*}" name="${cat##*:}"
-    curl -fsSL --retry 3 -o "$cache/android16-macos/$name" "$(mirror_url "$google_base$src")" \
-      || curl -fsSL --retry 3 -o "$cache/android16-macos/$name" "$google_base$src" \
+    curl -fsSL --retry 3 -o "$cache/sdk-macos/$name" "$(mirror_url "$google_base$src")" \
+      || curl -fsSL --retry 3 -o "$cache/sdk-macos/$name" "$google_base$src" \
       || die "cannot fetch $src"
   done
 }
@@ -166,7 +163,7 @@ fetch_gpl() {
   The following components are licensed under GPL-3.0, NOT Apache-2.0,
   and are downloaded from upstream because you are building the full edition (use --pure to skip):
     · microg-spoof/  (MicroG Signature Compatibility, derived from FakeGApps)
-    · third_party/Magisk/host_patch.sh  (topjohnwu/Magisk v30.7)
+    · third_party/Magisk/host_patch.sh  (topjohnwu/Magisk v31.0)
   They stay under their own license. Do not redistribute them as Apache-2.0.
   ──────────────────────────────────────────────────────────────────────
 
@@ -209,7 +206,7 @@ for a in json.load(open(sys.argv[1]))['archives']:
         print(r); break
 PY
 )"
-    [[ -n "$rel" ]] || die "runtime-lock.json has no $kind entry"
+    [[ -n "$rel" ]] || die "$(basename "$lock") has no $kind entry"
     case "$kind" in
       jdk) [[ -d "$tc/jdk" ]] && continue ;;
       build-tools) [[ -d "$tc/sdk/build-tools/36.0.0" ]] && continue ;;
@@ -266,14 +263,7 @@ main() {
   if [[ "$with_gpl" == 1 ]]; then export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=0
   else export ANDROID_SUBSYSTEM_GRAPHICS_ONLY=1; fi
   say 'Building and installing'
-  /bin/bash "$project_root/Install.command" && exit 0
-  local status=$?
-  if [[ "$android" == 17 && -t 0 ]]; then
-    printf '\nAndroid 17 install did not finish. Retry on Android 16? [y/N] '
-    read -r answer || answer=''
-    if [[ "$answer" == [yY]* ]]; then AEROANDROID_FORCE_ANDROID=16 exec /bin/bash "$0" "${original_args[@]}"; fi
-  fi
-  exit "$status"
+  /bin/bash "$project_root/Install.command"
 }
 
 main

@@ -35,8 +35,8 @@ cache="${ANDROID_SUBSYSTEM_CACHE:-$default_cache}"
 echo "Offline dependencies: $cache"
 [[ "$(uname -s)" == Darwin ]] || { echo 'Requires a Mac.'; exit 1; }
 source "$project_root/scripts/host.sh"
-# build.sh exports the lock for the chosen Android version; run directly, default to Android 17.
-export ANDROID_SUBSYSTEM_LOCK="${ANDROID_SUBSYSTEM_LOCK:-$(lock_for 17)}"
+# build.sh exports the lock for this Mac; run directly, pick it here.
+export ANDROID_SUBSYSTEM_LOCK="${ANDROID_SUBSYSTEM_LOCK:-$(lock_for)}"
 echo "Mac architecture: $HOST_ARCH; lock file: $(basename "$ANDROID_SUBSYSTEM_LOCK")"
 if ! xcrun --find swift >/dev/null 2>&1; then
   echo 'Xcode Command Line Tools are required. Install them, then open this file again.'
