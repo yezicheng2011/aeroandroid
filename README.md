@@ -61,7 +61,7 @@ pinned in `scripts/runtime-lock.json` (`-x86_64` for Intel). Root uses Magisk v3
 The microG signature module hooks `ComputerEngine`, whose methods are unchanged in Android 17 (checked against `android-17.0.0_r1`).
 
 **Coming from Android 16?** Android 16 has been removed. Run the installer once: it installs Android 17, carries your
-settings over and deletes the Android 16 system image to free disk space. Your Android 16 apps and data are not copied into
+settings over and (in the full install) deletes the Android 16 system image to free disk space. Your Android 16 apps and data are not copied into
 Android 17; they stay as a backup in `~/Library/Application Support/AndroidSubsystem/avd/` (the `MacAndroid_16_*` folders).
 Delete them when you no longer need them.
 
