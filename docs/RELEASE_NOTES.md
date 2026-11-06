@@ -1,9 +1,10 @@
-## aeroandroid 1.0.0 · Official release · macOS DMG (Apple Silicon + Intel)
+## aeroandroid 1.0.1 · macOS DMG (Apple Silicon + Intel)
 
-**下载 / Download:** `aeroandroid-1.0.0-macOS-universal.dmg` — Apple 芯片与 Intel Mac（Intel 需 2018 年及以后机型）通用，macOS 14+。不支持 Windows。 / Universal: Apple Silicon and Intel (2018+), macOS 14+. Not Windows.
+**下载 / Download:** `aeroandroid-1.0.1-macOS-universal.dmg` — Apple 芯片与 Intel Mac（Intel 需 2018 年及以后机型）通用，macOS 14+。不支持 Windows。 / Universal: Apple Silicon and Intel (2018+), macOS 14+. Not Windows.
 
 ### 本版新内容 / What's new
-- **正式版 1.0.0**：不再标注开发者预览；作为首个正式发行版发布。
+- **修复安装脚本无法启动 / Installer no longer crashes on startup：** `build.sh` 在 `set -u` 下于赋值之前就导出了 `lock_file`（0288525 引入）。除 `--help` 外，每次运行都会立刻退出：`lock_file: unbound variable`。1.0.1 先算出锁定文件路径，再导出 `ANDROID_SUBSYSTEM_LOCK`。 / `build.sh` exported `lock_file` before assigning it, so with `set -u` every run except `--help` exited immediately (`unbound variable`). 1.0.1 assigns the lock path first.
+- **正式版 1.0.0**：不再标注开发者预览；作为首个正式发行版发布。1.0.1 是在其上的安装修复。
 - **Intel Mac ARM→x86 转译层**：完整版在 Intel 上从 AOSP 的 libndk_translation / berberis（Apache-2.0）构建 Magisk 模块，使多数 arm64 APK 可在 x86_64 系统镜像上运行；可用 `--no-arm-translation` 跳过。纯净版不下载 Google APIs 镜像。
 - **Magisk 模块安装修复**：在首次打开 Magisk 应用之前先填充 `/data/adb/magisk`，修复「Incomplete Magisk install」（microG 等步骤同样受益）。
 - **受限网络镜像**：F-Droid 下载优先尝试清华 / 南大镜像（`--mirror cn` / `FDROID_MIRROR`）；SHA-256 不符则跳过该镜像。

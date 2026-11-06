@@ -1,6 +1,6 @@
 # Android 16 · Magisk Root and microG Setup
 
-By default this uses pure AOSP Android 16 ARM64, Magisk v30.7 and open-source microG. All dependencies are pinned in `runtime-lock.json`; this version installs no GApps or proprietary Google system components. See the [microG notes](MICROG.md) for microG capabilities, self-check and commercial distribution caveats.
+The installer default is the full edition on Android 17 (Magisk v31.0, pinned in `runtime-lock-17.json`). This note is the Android 16 procedure: `./build.sh --android 16` uses Magisk v30.7 from `runtime-lock.json`. `./build.sh --pure` skips Magisk and microG; `--with-gpl` is an alias of the default full edition. Neither edition installs GApps or proprietary Google system components. See the [microG notes](MICROG.md) for microG capabilities, self-check and commercial distribution caveats.
 
 ## Magisk implementation
 
