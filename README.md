@@ -29,7 +29,7 @@ window per app, plus an Android-side bridge for input, clipboard and notificatio
 ## Install
 
 **Download the official macOS installer** from [aeroandroid.com](https://aeroandroid.com/#download)
-(`aeroandroid-1.0.1-macOS-universal.dmg`). You do not package a release yourself: the installer downloads the runtime and builds the Mac app on your machine.
+(`aeroandroid-1.1.0-macOS-universal.dmg`). You do not package a release yourself: the installer downloads the runtime and builds the Mac app on your machine.
 
 Requires a Mac (Apple Silicon, or an Intel Mac from 2018 on), macOS 14+, the Xcode Command Line Tools
 (`xcode-select --install`), about 20 GB of free disk and an internet connection. The DMG is about 1.3 MB;

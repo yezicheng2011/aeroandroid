@@ -3,7 +3,7 @@ aeroandroid
 Install from the official macOS DMG. You do not package a release yourself: the installer
 downloads the runtime and builds the Mac app on your machine.
 Download it from the latest GitHub release or https://aeroandroid.com/releases.html
-(aeroandroid-1.0.1-macOS-universal.dmg). Open the disk image, Control-click
+(aeroandroid-1.1.0-macOS-universal.dmg). Open the disk image, Control-click
 "Install aeroandroid.command", and choose Open. On macOS 15, if it was blocked:
 System Settings → Privacy & Security → Open Anyway.
 
