@@ -23,6 +23,8 @@ jobs:
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          # The app's version comes from the VERSION file; a tag that disagrees would ship a mislabelled build.
+          test "$(tr -d '[:space:]' < VERSION)" = "${tag#v}" || { echo "::error::tag $tag does not match VERSION $(cat VERSION)"; exit 1; }
           # The sources need a Swift 6 compiler (Xcode 16, run in Swift 5 language mode), like current Command Line Tools.
           ls -d /Applications/Xcode_*.app
           xc="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"

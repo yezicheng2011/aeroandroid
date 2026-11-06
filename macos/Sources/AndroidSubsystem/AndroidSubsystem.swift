@@ -78,6 +78,10 @@ final class Backend {
             throw BridgeFailure(message: detail.isEmpty ? L10n.t("err.controller_empty") : String(detail.suffix(3000)))
         }
         guard response["ok"] as? Bool == true else {
+            // The controller speaks English; a known error code gets the app's own translation.
+            if let code = response["code"] as? String, L10n.t("err.backend." + code) != "err.backend." + code {
+                throw BridgeFailure(message: L10n.t("err.backend." + code))
+            }
             throw BridgeFailure(message: response["error"] as? String ?? L10n.t("err.operation_failed"))
         }
         return response["data"] as? [String: Any] ?? [:]
@@ -308,6 +312,11 @@ final class SubsystemModel: ObservableObject {
             let result = try await self.backend.call("diagnostic")
             self.checks = result["checks"] as? [[String: Any]] ?? []
         }
+    }
+    /// A manager update would otherwise never reach the Mac apps made earlier, which carry their own copy of it.
+    func refreshLaunchers() {
+        let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path
+        Task { _ = try? await backend.call("refresh-launchers", ["app_path": Bundle.main.bundleURL.path, "destination": folder]) }
     }
     func saveConfiguration(android: Int, memory: Int, cores: Int, fps: Int, gpu: String) {
         operation(L10n.t("prog.save_config")) {
@@ -642,6 +651,7 @@ struct AndroidSubsystemApp: App {
                 UNUserNotificationCenter.current().delegate = notificationDelegate
                 ApkHandler.registerOnce()
                 IntelNotice.showOnce()
+                model.refreshLaunchers()
             }
         }
         .commands {
