@@ -1,16 +1,19 @@
-## aeroandroid 1.0.1 · macOS DMG (Apple Silicon + Intel)
+## aeroandroid 1.1.0 · macOS DMG (Apple Silicon + Intel)
 
-**Download:** `aeroandroid-1.0.1-macOS-universal.dmg` — Apple Silicon and Intel Macs (Intel: 2018 or newer), macOS 14+. Not Windows.
+**Download:** `aeroandroid-1.1.0-macOS-universal.dmg` — Apple Silicon and Intel Macs (Intel: 2018 or newer), macOS 14+. Not Windows.
 
 ### What's new
-- **Installer no longer crashes on startup:** `build.sh` exported `lock_file` before assigning it, so with `set -u` every run except `--help` exited immediately (`unbound variable`). 1.0.1 assigns the lock path first.
-- **1.0.0 is the first stable release.** It is no longer marked a developer preview. 1.0.1 is the install fix on top of that release.
-- **ARM-to-x86 translation on Intel Macs:** the full edition builds a Magisk module from AOSP's libndk_translation / berberis (Apache-2.0) so most arm64 APKs can run on the x86_64 system image. Skip it with `--no-arm-translation`. The pure edition does not download the Google APIs image.
-- **Magisk module install fix:** `/data/adb/magisk` is filled in before the Magisk app is opened the first time, which fixes "Incomplete Magisk install" (microG and the later steps use the same path).
-- **Mirrors on restricted networks:** F-Droid downloads try the Tsinghua and NJU mirrors first (`--mirror cn` / `FDROID_MIRROR`). A mirror whose file does not match the pinned SHA-256 is skipped.
-- **Pre-installed apps follow the CPU:** on Intel, a native x86_64 build is preferred (Fennec, for example).
-- **Signing:** the app and the DMG are ad-hoc signed. Gatekeeper says it cannot verify the developer. It does not say the file is damaged. Control-click → Open.
-- **Copyright:** Copyright © 2026 daniel.ye (Apache-2.0). See `NOTICE` and `docs/LICENSING.md`.
+- **English installer and docs.** The disk-image installer is `Install aeroandroid.command`. Its prompts and the install notes are English. Copyright is daniel.ye (Apache-2.0). See `NOTICE` and `docs/LICENSING.md`.
+- **The Mac app is English by default.** It no longer follows the system language into Chinese. The Dock and Finder name is "Android Subsystem". Chinese remains available if you choose it in Settings.
+- **Old installs upgrade when you run the installer once.** A Mac that still has saved Android 16 settings, or a legacy Google image, keeps its settings. Old apps and data are left as a backup. The Magisk ramdisk patched from the old image is dropped. Until you run the installer, the app explains what to do instead of failing.
+- **Android 17 (API 37) is the only Android version.** Android 16 support, the Settings version picker, and helper `--android` for other versions are gone. `./build.sh --android 17` still works. Settings shows a fixed "Android 17 · API 37" row.
+- **A new logo that follows light and dark mode.** The Dock and Finder icon is the light look.
+- **Fixes:**
+  - Installing an app the CPU cannot run (arm64-only code on an Intel Mac) shows the ARM-translation explanation. That failure used to appear as raw adb text.
+  - Two Android apps with the same name get separate Mac apps, such as `Notes.app` and `Notes (notes2).app`, instead of an error.
+  - APKs opened while the installer is busy are queued. They used to be dropped when the helper quit after the first install.
+  - The guest screen no longer drops the last frame of a burst, so the last typed letter or the end of a scroll is not left off the Mac window.
+  - A bad boot-timeout setting no longer crashes the controller. An empty `PATH` entry no longer adds the current folder to `PATH`. The graphics token file is private from the start. An unreadable config is reported, and the installer writes it in one step. If Android stops while starting, the error includes the end of `emulator.log`. One Mac app that cannot be refreshed no longer stops the others. Messages that told you to run `setup-mac.sh` now say to run the installer again.
 
 Lightweight DMG: the manager (`Android Subsystem.app`) + `Install aeroandroid.command` + source + `README-FIRST.txt`. The Android runtime (about 1.8 GB) is downloaded during installation from official sources and each file is checked with SHA-256 (`--mirror cn` uses mirrors).
 
@@ -20,7 +23,7 @@ Lightweight DMG: the manager (`Android Subsystem.app`) + `Install aeroandroid.co
 3. The script copies the source to `~/aeroandroid` and runs `build.sh`. When it finishes, use `~/Applications/Android Subsystem.app`. The `Android Subsystem.app` inside the DMG is a prebuilt sample, not the install.
 4. See `README-FIRST.txt` in the DMG.
 
-The default is the full edition (AOSP + Magisk + microG, with Aurora Store and Fennec). Pure AOSP is `./build.sh --pure`.
+The default is the full edition (AOSP + Magisk + microG, with Aurora Store and Fennec) on Android 17. Pure AOSP is `./build.sh --pure`.
 
 ### Signing
 Ad-hoc signature (no Apple Developer certificate): Gatekeeper says it cannot verify the developer, and does not say the file is damaged. Control-click → Open. Check the download with `SHA256SUMS.txt`.

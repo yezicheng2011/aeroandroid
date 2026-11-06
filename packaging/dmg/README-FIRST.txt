@@ -1,4 +1,4 @@
-aeroandroid 1.0.1 · Android Subsystem for Apple Silicon and Intel Macs
+aeroandroid 1.1.0 · Android Subsystem for Apple Silicon and Intel Macs
 Lightweight DMG: manager app + installer + source. The Android runtime (about 1.8 GB) is downloaded during installation from official sources and each file is checked with SHA-256.
 
 Requirements: Apple Silicon, or an Intel Mac from 2018 on, macOS 14 or later, the Xcode Command Line Tools (xcode-select --install), and at least 20 GB of free disk.
@@ -8,7 +8,7 @@ Install
    The installer builds the Mac app with Swift, so this step is required.
 2. Control-click "Install aeroandroid.command" and choose Open, then Open again.
    On macOS 15, if macOS reports that it could not be opened: System Settings → Privacy & Security → Open Anyway (at the bottom).
-   Or, in Terminal: bash "/Volumes/aeroandroid 1.0.1/Install aeroandroid.command"
+   Or, in Terminal: bash "/Volumes/aeroandroid 1.1.0/Install aeroandroid.command"
 3. The script copies the source to ~/aeroandroid (the DMG is read-only), then runs build.sh: download the runtime, build, and install.
    In mainland China, type y at the prompt to use mirrors there (the same as ./build.sh --mirror cn).
    You will be asked to read and accept the Android SDK license. Type YES to continue.

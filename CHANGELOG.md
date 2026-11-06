@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
+- The DMG installer is `Install aeroandroid.command`. Its prompts, the other `.command` scripts, and the install notes are English. Copyright attribution is daniel.ye. The installed app is `~/Applications/Android Subsystem.app`; the copy in the DMG is only a sample. Gatekeeper reports that it cannot verify the developer (ad-hoc signature).
 - **Old installs are upgraded instead of stopping.** A Mac with the old Google-image setup (from the 0.2 releases: saved settings with `"android": 16` and no image type) used to fail with "Legacy Google image is retained only for migration". The app now switches to Android 17, keeps the old apps and data as a backup, and keeps your settings. If Android 17 is not installed yet it says to run the installer once, instead of showing a dead end.
 - **English by default.** The app no longer follows the system language: it is English unless Chinese is chosen in Settings, and a missing string falls back to English (it used to fall back to Chinese, and also chose Chinese for any language other than English). The Dock and Finder name is "Android Subsystem" (it used to be a Chinese name), the app's base language is pinned to English, and the notification-settings screen inside Android is English.
 - **Android 16 is removed; Android 17 is the only version.** Settings shows "Android 17 · API 37" instead of a picker; `build.sh --android 16` is refused (`--android 17` still works) and the "retry on Android 16" prompt is gone; the Android 16 locks and the `--android` option of the helper scripts are gone; `scripts/runtime-lock-17.json` and `runtime-lock-17-x86_64.json` became `runtime-lock.json` and `runtime-lock-x86_64.json`. A Mac that still has Android 16 is upgraded by running the installer once: it installs Android 17, keeps your settings, deletes the Android 16 system image, and keeps the Android 16 apps and data as a backup in `~/Library/Application Support/AndroidSubsystem/avd/`. Until then the app says what to do instead of failing, and the old install can still be stopped. The shared SDK downloads moved from `runtime-cache/android16-macos/` to `runtime-cache/sdk-macos/`: the installer renames your existing folder (nothing is downloaded again) and deletes the Android 16 emulator and system image zips from it.
@@ -25,10 +26,6 @@
 - The release workflow no longer ignores a failing `build.sh --check`.
 - Pull requests and pushes run unit tests, `bash -n`, shellcheck, and a macOS `swift build`.
 - Controller port tests bind a port that is actually free, and skip when the emulator port range is busy. `ports_available` uses `SO_REUSEADDR`, so a port left in TIME_WAIT used to look free and the next plain bind raised `Address already in use`.
-
-## Unreleased
-
-- The DMG installer is `Install aeroandroid.command`. Its prompts, the other `.command` scripts, and the install notes are English. The installed app is `~/Applications/Android Subsystem.app`; the copy in the DMG is only a sample. Gatekeeper reports that it cannot verify the developer (ad-hoc signature).
 - `tests/test_build_script.py` runs `build.sh` for real (every option, the lock chosen per chip and Android version, the Intel notice, the translation switch). `bash -n` only checks syntax, which is how the unbound variable got through.
 - One `VERSION` file and one copyright line render both Info.plists. Mac apps made for Android apps carry the manager's version, and the manager refreshes them on start (`refresh-launchers`), so an update reaches the apps it made. Release builds fail if the tag and `VERSION` differ.
 - Controller errors are English with a code; the Mac app shows its own translation for known codes (it was Chinese-only before).
