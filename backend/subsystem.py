@@ -641,7 +641,8 @@ class Controller:
             if "NO_MATCHING_ABIS" in result.stdout:
                 abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip() or self.abi
                 raise SubsystemError(f"This app's native code does not match the CPU types of this Android system ({abis}). "
-                                     "On an Intel Mac, apps built only for arm64 (many games) cannot run.")
+                                     "An Intel Mac needs ARM translation to run apps built only for arm64 (many games): rebuild with ./build.sh "
+                                     "(not --pure or --no-arm-translation), or run scripts/provision-arm-translation.py.")
             if "Success" not in result.stdout:
                 raise SubsystemError(result.stdout or "APK installation failed")
             return {"installed": [p.name for p in paths]}

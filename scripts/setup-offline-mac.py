@@ -20,6 +20,11 @@ PROJECT = Path(__file__).resolve().parents[1]
 COMMON_NAMESPACE = 'http://schemas.android.com/repository/android/common/02'
 
 
+def arm_translation_wanted(lock, graphics_only):
+    """Intel Macs get ARM translation with the full (rooted) edition, unless AEROANDROID_ARM_TRANSLATION=0."""
+    return lock.get('arch') == 'x86_64' and not graphics_only and os.environ.get('AEROANDROID_ARM_TRANSLATION', '1') != '0'
+
+
 def package_destination(sdk, package):
     """Where an SDK package lives: platforms;android-36 -> platforms/android-36, and so on."""
     fixed = {'cmdline-tools;latest': 'cmdline-tools/latest', 'platform-tools': 'platform-tools', 'emulator': 'emulator'}
@@ -177,6 +182,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
     root.mkdir(parents=True, exist_ok=True)
     # Every path and digest is fixed in the shipped lockfile, not inferred from filenames.
     for entry in lock['archives']:
+        if entry.get('kind') == 'arm_translation' and not arm_translation_wanted(lock, graphics_only): continue
         archive = cache / entry['relative_path']
         if not archive.is_file(): raise RuntimeError(f'Missing runtime archive: {archive}')
         print('校验：', archive.name, flush=True)
@@ -244,6 +250,12 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         if not graphics_only:
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-mac.py'), str(cache)], env=env, check=True)
             subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-microg.py'), str(cache)], env=env, check=True)
+            if arm_translation_wanted(lock, graphics_only):
+                # Optional extra: a failure here must not undo an otherwise good install.
+                translated = subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-arm-translation.py'), str(cache)], env=env)
+                if translated.returncode:
+                    print('Intel Mac：ARM 翻译未安装，只含 arm64 代码的应用将无法运行。 / ARM translation was not installed; '
+                          'apps with only arm64 code will not run. Retry: python3 scripts/provision-arm-translation.py runtime-cache')
             subprocess.run([sys.executable, str(PROJECT / 'scripts/preinstall-apps.py'), str(cache)], env=env, check=True)
             retire_legacy_google_image(root)
         # Save a Quick Boot snapshot now so the first app you open starts in seconds. Only a speed-up.
@@ -275,6 +287,7 @@ def main():
     # A retry with existing dependencies needs space for compilation, not another
     # full SDK extraction. Full provisioning also needs room for Guest userdata.
     required_gb = (2 if args.graphics_only else 12) if runtime_installed(args.root, lock) else 20
+    if arm_translation_wanted(lock, args.graphics_only): required_gb += 8   # Google's image (2 GB) and a 5.5 GB working copy
     if shutil.disk_usage(args.root.parent if args.root.parent.exists() else Path.home()).free < required_gb * 1024**3:
         raise RuntimeError(f'At least {required_gb} GB free disk space is required for this installation stage')
     subprocess.run(['/usr/bin/xcrun', '--find', 'swift'], check=True, stdout=subprocess.DEVNULL)

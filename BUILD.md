@@ -15,6 +15,7 @@
 ./build.sh --mirror cn     # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ./build.sh --with-gpl      # full edition: also fetch GPL-3.0 parts, install Magisk + microG
 ./build.sh --android 16    # Android 16 instead of the default Android 17 (API 37)
+./build.sh --no-arm-translation   # Intel Macs: skip ARM translation (saves a 2 GB download and 8 GB of disk)
 ./build.sh --check         # prerequisites only
 ./build.sh --download-only # only fill ./runtime-cache
 ```
@@ -28,6 +29,7 @@ This repository is Apache-2.0. The microG signature module (`microg-spoof/`, der
 ### Troubleshooting
 - **"Requires a Mac"**: only macOS is supported, on Apple Silicon or Intel; not Linux or Windows.
 - **Missing Command Line Tools**: `xcode-select --install`, then reopen Terminal.
+- **Restricted networks (for example mainland China)**: see "Restricted networks" in the README; `SDK_MIRROR`, `GH_MIRROR` and `FDROID_MIRROR` point the three kinds of download anywhere.
 - **Slow or failing downloads**: use `--mirror cn` or set `GH_MIRROR=https://ghfast.top/`. Re-running resumes; verified files are skipped.
 - **SHA-256 mismatch**: the mirror served a bad file; the script retries from the official URL. If it still fails, delete that file from `runtime-cache` and re-run.
 - **SDK license**: the installer shows the Android SDK license for you to accept.

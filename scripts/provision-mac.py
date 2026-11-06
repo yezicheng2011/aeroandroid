@@ -12,6 +12,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import tempfile
 import time
 import zipfile
 
@@ -32,6 +33,44 @@ def digest(path):
     with path.open('rb') as f:
         for block in iter(lambda: f.read(4 * 1024 * 1024), b''): h.update(block)
     return h.hexdigest()
+
+
+MAGISK_ENV = '/data/adb/magisk'
+
+
+def magisk_apk(cache, controller):
+    """The pinned Magisk APK for this Android version, from the verified cache."""
+    lock = json.loads(lock_file(controller.config['android'], controller.arch).read_text())
+    entry = next(e for e in lock['archives'] if e.get('kind') == 'magisk')
+    path = cache / entry['relative_path']
+    if not path.is_file() or digest(path) != entry['sha256']:
+        raise RuntimeError(f'Invalid provision archive: {path.name}')
+    return path
+
+
+def ensure_magisk_env(controller, apk):
+    """Put Magisk's tools where `magisk --install-module` expects them.
+
+    That command stops with "Incomplete Magisk install" until /data/adb/magisk holds Magisk's binaries and
+    scripts. The Magisk app does this on its first launch, but this project installs the app without ever
+    opening it, so copy them out of the APK here (binaries for the guest's ABI, plus the shell scripts)."""
+    wanted = {}
+    with zipfile.ZipFile(apk) as archive:
+        prefix = f'lib/{controller.abi}/'
+        for name in archive.namelist():
+            if name.startswith(prefix) and name.endswith('.so'):
+                wanted[name[len(prefix) + 3:-3]] = archive.read(name)      # libmagisk.so -> magisk
+        for name in ('util_functions.sh', 'boot_patch.sh', 'stub.apk'):
+            wanted[name] = archive.read('assets/' + name)
+    if not {'magisk', 'busybox', 'util_functions.sh'} <= set(wanted):
+        raise RuntimeError('The Magisk APK does not contain the files Magisk needs')
+    controller.adb('shell', 'mkdir', '-p', MAGISK_ENV)
+    with tempfile.TemporaryDirectory() as folder:
+        for name, data in wanted.items():
+            local = Path(folder) / name
+            local.write_bytes(data)
+            controller.adb('push', str(local), f'{MAGISK_ENV}/{name}', timeout=60)
+    controller.adb('shell', 'sh', '-c', f'chmod 755 {MAGISK_ENV}/* && chcon -R u:object_r:system_file:s0 {MAGISK_ENV}')
 
 
 def wait_device(controller, limit=90):

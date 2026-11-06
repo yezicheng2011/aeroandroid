@@ -118,6 +118,30 @@ class MagiskProvisionTests(unittest.TestCase):
             self.assertFalse(any('--install-module' in args for args in controller.calls))
             self.assertEqual(json.loads((root / 'provision-report.json').read_text()), report)
 
+    def test_magisk_environment_is_copied_out_of_the_apk_for_the_guest_abi(self):
+        with tempfile.TemporaryDirectory() as folder:
+            apk = Path(folder) / 'Magisk.apk'
+            with zipfile.ZipFile(apk, 'w') as archive:
+                for abi in ('arm64-v8a', 'x86_64'):
+                    for library in ('libmagisk.so', 'libbusybox.so', 'libinit-ld.so'):
+                        archive.writestr(f'lib/{abi}/{library}', f'{abi}:{library}')
+                for script in ('util_functions.sh', 'boot_patch.sh', 'stub.apk'):
+                    archive.writestr('assets/' + script, script)
+            controller = FakeController(Path(folder)); controller.abi = 'x86_64'
+            pushed = {}
+            real_adb = controller.adb
+            def adb(*args, **kwargs):
+                if args[0] == 'push': pushed[args[2]] = Path(args[1]).read_text()
+                return real_adb(*args, **kwargs)
+            controller.adb = adb
+            provision.ensure_magisk_env(controller, apk)
+        self.assertEqual(pushed['/data/adb/magisk/magisk'], 'x86_64:libmagisk.so')       # libmagisk.so becomes "magisk"
+        self.assertEqual(pushed['/data/adb/magisk/init-ld'], 'x86_64:libinit-ld.so')
+        self.assertEqual(pushed['/data/adb/magisk/util_functions.sh'], 'util_functions.sh')
+        self.assertFalse(any('arm64' in value for value in pushed.values()))
+        self.assertIn(('shell', 'sh', '-c', 'chmod 755 /data/adb/magisk/* && chcon -R u:object_r:system_file:s0 /data/adb/magisk'),
+                      [tuple(call) for call in controller.calls if call and call[0] == 'shell'])
+
     def test_verification_accepts_guest_with_only_magisk_manager(self):
         controller = FakeController()
         report = provision.verify(controller)

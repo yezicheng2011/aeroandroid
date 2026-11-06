@@ -247,8 +247,11 @@ class ProvisionTests(unittest.TestCase):
                     microg, 'load_assets', return_value=(apks, vector)), mock.patch.object(
                     microg, 'apk_info', side_effect=info), mock.patch.object(
                     microg.core, 'verify', return_value={'magisk': '30.7'}), mock.patch.object(
-                    microg.core, 'adb_root'), mock.patch.object(microg.core, 'wait_device'):
+                    microg.core, 'adb_root'), mock.patch.object(microg.core, 'wait_device'), mock.patch.object(
+                    microg.core, 'magisk_apk', return_value=root / 'magisk.apk'), mock.patch.object(
+                    microg.core, 'ensure_magisk_env') as env:
                 report = microg.provision(root, root)
+            env.assert_called_once()   # `magisk --install-module` fails without Magisk's environment
             self.assertEqual(controller.boot_count, 3)
             self.assertEqual(controller.zygisk, 1)
             self.assertTrue(report['signature_checked'])

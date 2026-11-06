@@ -21,6 +21,10 @@ Third-party components downloaded at build/run time on the user's own Mac (NOT i
 - Vector (LSPosed fork) v2.2 (GPL-3.0)
 - microG GmsCore and microG Companion APKs (Apache-2.0)
 - Aurora Store (GPL-3.0-or-later) and Fennec F-Droid (MPL-2.0), pre-installed from pinned F-Droid APKs
+- Intel Macs only: Google's x86_64 "Google APIs" system image (Android SDK License). Only AOSP's ARM translator
+  (libndk_translation / berberis, Apache-2.0, with the arm64 AOSP libraries it uses under their own licenses) is
+  copied out of it into a local Magisk module; none of Google's apps or services are installed, and the image is
+  discarded. See scripts/arm_translation.py and docs/LICENSING.md
 
 Not included because they are GPL-3.0 (copyleft) and cannot be relicensed:
 - microg-spoof/ (MicroG Signature Compatibility module, derived from FakeGApps, GPL-3.0-only);

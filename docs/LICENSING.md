@@ -38,6 +38,7 @@ The repository contains no GPL code, no Google code and no prebuilt binaries oth
 | microG GmsCore, Companion | Apache-2.0 | Google API compatibility (full edition only) |
 | microg-spoof (from aeroandroid.com source zip) | GPL-3.0-only | Signature compatibility (full edition only) |
 | Aurora Store | GPL-3.0-or-later | Pre-installed app, pinned F-Droid APK |
+| Google APIs x86_64 system image (Intel Macs, full edition) | Android SDK License | Source of AOSP's ARM translator; only the translator files are copied out, the rest is discarded |
 | Fennec F-Droid | MPL-2.0 | Pre-installed app, pinned F-Droid APK |
 
 Because these arrive on the user's machine straight from their upstreams, this project is not redistributing them,
@@ -45,6 +46,18 @@ and a GPL component sitting next to Apache-2.0 code on one disk is a mere aggreg
 `build.sh` prints a GPL notice before fetching the GPL parts and verifies every file against a pinned SHA-256.
 `build.sh` changes one line of `microg-spoof` after download (it admits Android 17); that modified file is still
 GPL-3.0 and stays on the user's machine.
+
+### The ARM translator on Intel Macs
+
+`scripts/arm_translation.py` reads Google's image on the user's own Mac and copies a fixed set of files out of it: the
+translator (`libndk_translation`, "berberis", Apache-2.0), its proxy libraries, and the arm64 builds of AOSP system
+libraries it runs against (bionic, ICU, BoringSSL, zlib and others, under their own open-source licenses, listed in the
+image's `NOTICE.txt`). No Google app or service is copied and the image is not kept. The result is a private
+Magisk module on that Mac. This project does not host or redistribute it.
+
+If you decide to host a prebuilt module (the installer accepts one through `ARM_TRANSLATION_MODULE`), that is a
+redistribution: ship the relevant licenses from the image's `NOTICE.txt`, keep the Apache-2.0 notices, and check that
+Google's Android SDK License allows it for your case. Building it on the user's machine, as the installer does, avoids the question.
 
 ## What you must do if you redistribute a build
 

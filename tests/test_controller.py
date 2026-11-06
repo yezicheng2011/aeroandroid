@@ -117,7 +117,7 @@ class IntegrationTests(unittest.TestCase):
 
     def test_apk_that_cannot_run_on_this_cpu_gets_a_plain_explanation(self):
         apk = self.root / 'game.apk'; apk.write_bytes(b'arm64 only')
-        with self.assertRaisesRegex(subsystem.SubsystemError, r'x86_64,x86\). On an Intel Mac, apps built only for arm64'):
+        with self.assertRaisesRegex(subsystem.SubsystemError, r'x86_64,x86\). An Intel Mac needs ARM translation'):
             self.controller.install([str(apk)])
         self.controller.stop()
 

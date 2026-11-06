@@ -372,6 +372,7 @@ def provision(cache, root=None):
         module = workspace / 'MacMicroG16.zip'
         granted = make_module(apks, privileged, module)
         binary, _ = core.magisk_binary(controller)
+        core.ensure_magisk_env(controller, core.magisk_apk(cache.resolve(), controller))   # else --install-module refuses
         configure_zygisk(controller, binary)
         # Only our private runtime and these exact new temporary names are touched.
         for source, guest in [(vector, '/data/local/tmp/mac_subsystem_vector.zip'),
