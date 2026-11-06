@@ -91,7 +91,7 @@ def register_sdk_packages(records, destinations):
         pending = destination / 'package.xml.pending'
         pending.write_bytes(document.toxml(encoding='UTF-8'))
         pending.replace(destination / 'package.xml')
-        print('登记 SDK 包：', entry['package'], flush=True)
+        print('Registered SDK package:', entry['package'], flush=True)
     return licenses
 
 
@@ -105,9 +105,9 @@ def accept_sdk_licenses(licenses, sdk, root, accept=False):
         saved = root / (license_id + '.txt')
         saved.write_text(text + '\n')
         if not accept:
-            print('\nSDK 协议已保存到：', saved)
+            print('\nSDK license saved to:', saved)
             print(text)
-            if input('\n阅读后，是否接受该 SDK 协议？输入 YES 继续：').strip() != 'YES':
+            if input('\nAfter reading, accept this SDK license? Type YES to continue: ').strip() != 'YES':
                 raise RuntimeError('SDK license was not accepted; installation cancelled')
         target.write_text('\n'.join(previous + [digest]) + '\n')
 
@@ -173,7 +173,7 @@ def retire_legacy_google_image(root):
     if legacy.is_symlink() or not legacy.resolve().is_relative_to(root):
         raise RuntimeError('Legacy SDK image path is redirected; refusing cleanup')
     shutil.rmtree(legacy)
-    print('已移除旧 Google APIs 系统镜像；原安卓用户数据保留为离线备份。')
+    print('Removed the old Google APIs system image. The previous Android user data is kept as an offline backup.')
 
 
 def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=False):
@@ -185,7 +185,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         if entry.get('kind') == 'arm_translation' and not arm_translation_wanted(lock, graphics_only): continue
         archive = cache / entry['relative_path']
         if not archive.is_file(): raise RuntimeError(f'Missing runtime archive: {archive}')
-        print('校验：', archive.name, flush=True)
+        print('Checking:', archive.name, flush=True)
         if sha256(archive) != entry['sha256']: raise RuntimeError(f'Checksum mismatch: {archive.name}')
     metadata = ET.parse(cache / 'android16-macos/repository2-3.xml').getroot()
     license_node = next(x for x in metadata.findall('license') if x.get('id') == 'android-sdk-license')
@@ -196,9 +196,9 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
     license_digest = hashlib.sha1(license_text.encode()).hexdigest()
     previously_accepted = accepted.exists() and license_digest in accepted.read_text().splitlines()
     if not accept_licenses and not previously_accepted:
-        print('\nAndroid SDK 协议已保存到：', license_file)
+        print('\nAndroid SDK license saved to:', license_file)
         print(license_text)
-        if input('\n阅读后，是否接受该 SDK 协议？输入 YES 继续：').strip() != 'YES':
+        if input('\nAfter reading, accept this SDK license? Type YES to continue: ').strip() != 'YES':
             raise RuntimeError('SDK license was not accepted; installation cancelled')
     (sdk / 'licenses').mkdir(parents=True, exist_ok=True)
     if not previously_accepted: accepted.write_text(license_digest + '\n')
@@ -215,7 +215,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
             raise RuntimeError('Stop the existing Android subsystem before installing runtime dependencies')
         for entry in lock['archives']:
             archive = cache / entry['relative_path']
-            print('安装：', archive.name, flush=True)
+            print('Installing:', archive.name, flush=True)
             if entry.get('package'):
                 extract_zip(archive, destinations[entry['package']])
             elif entry['kind'] == 'python':
@@ -254,25 +254,25 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
                 # Optional extra: a failure here must not undo an otherwise good install.
                 translated = subprocess.run([sys.executable, str(PROJECT / 'scripts/provision-arm-translation.py'), str(cache)], env=env)
                 if translated.returncode:
-                    print('Intel Mac：ARM 翻译未安装，只含 arm64 代码的应用将无法运行。 / ARM translation was not installed; '
-                          'apps with only arm64 code will not run. Retry: python3 scripts/provision-arm-translation.py runtime-cache')
+                    print('Intel Mac: ARM translation was not installed; apps with only arm64 code will not run. '
+                          'Retry: python3 scripts/provision-arm-translation.py runtime-cache')
             subprocess.run([sys.executable, str(PROJECT / 'scripts/preinstall-apps.py'), str(cache)], env=env, check=True)
             retire_legacy_google_image(root)
         # Save a Quick Boot snapshot now so the first app you open starts in seconds. Only a speed-up.
         primed = subprocess.run([sys.executable, str(PROJECT / 'backend/subsystem.py'), 'prime'], env=env)
-        if primed.returncode: print('快速启动快照未保存，首次打开会较慢 / Quick Boot snapshot not saved; first launch will be slower.')
+        if primed.returncode: print('Quick Boot snapshot was not saved; the first launch will be slower.')
         app_folder = Path.home() / 'Applications'
         app_folder.mkdir(exist_ok=True)
         built = PROJECT / 'dist/Android Subsystem.app'
         target = app_folder / built.name
         if target.exists():
-            print('已有安装版本，更新前请退出管理应用。')
+            print('An install already exists. Quit the manager app before updating.')
             backup = app_folder / 'Android Subsystem.previous.app'
             if backup.exists(): shutil.rmtree(backup)
             target.rename(backup)
         shutil.copytree(built, target, symlinks=True)
         subprocess.run(['/usr/bin/open', str(target)], check=True)
-        print('安装完成：', target)
+        print('Install complete:', target)
 
 
 def main():
@@ -297,4 +297,4 @@ def main():
 if __name__ == '__main__':
     try: main()
     except (RuntimeError, OSError, subprocess.CalledProcessError, StopIteration) as e:
-        print('安装未完成：', e, file=sys.stderr); sys.exit(1)
+        print('Install did not finish:', e, file=sys.stderr); sys.exit(1)

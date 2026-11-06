@@ -392,7 +392,7 @@ def provision(cache, root=None):
         report['privileged_permissions'] = granted
         subsystem.atomic_json(controller.root / 'microg-report.json', report)
         print(json.dumps(report, ensure_ascii=False, indent=2))
-        print('microG 安装、模块配置及 Android 签名兼容检查完成。microG 界面自检和应用运行仍需在 M5 上确认。')
+        print('microG install, module setup, and Android signature-compatibility checks finished. The microG on-screen self-check and app behavior still need to be confirmed on an M5.')
         return report
     finally:
         controller.adb('unroot', check=False)
@@ -424,5 +424,5 @@ if __name__ == '__main__':
     try:
         main()
     except (OSError, RuntimeError, ValueError, KeyError, zipfile.BadZipFile, subsystem.SubsystemError) as error:
-        print('microG 配置未完成：', error, file=sys.stderr)
+        print('microG setup did not finish:', error, file=sys.stderr)
         sys.exit(1)

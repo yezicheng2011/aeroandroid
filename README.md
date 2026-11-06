@@ -23,22 +23,32 @@ window per app, plus an Android-side bridge for input, clipboard and notificatio
 ## Install
 
 **Download the official macOS installer** from [aeroandroid.com](https://aeroandroid.com/#download)
-(`aeroandroid-1.0.1-macOS-universal.dmg`). You do not need to package or compile anything yourself.
+(`aeroandroid-1.0.1-macOS-universal.dmg`). You do not package a release yourself: the installer downloads the runtime and builds the Mac app on your machine.
 
 Requires a Mac (Apple Silicon, or an Intel Mac from 2018 on), macOS 14+, the Xcode Command Line Tools
 (`xcode-select --install`), about 20 GB of free disk and an internet connection. The DMG is about 1.3 MB;
 the Android runtime (about 1.8 GB) is fetched during installation from official sources, because the Android
 SDK license does not allow redistribution.
 
-1. Run `xcode-select --install` if you have not already.
-2. Open the DMG, Control-click `安装 aeroandroid.command` (“Install aeroandroid”) and choose **Open**
-   (on macOS 15: **System Settings → Privacy & Security → Open Anyway**).
-3. Accept the Android SDK license when asked and wait for setup to finish. It opens
-   `~/Applications/Android Subsystem.app`.
+The default install is the full edition: Android 17, AOSP, Magisk, microG, Aurora Store, and Fennec.
+`./build.sh --pure` is pure AOSP only (no Magisk, no microG, no pre-installed apps, no GPL-3.0 parts).
+
+1. Run `xcode-select --install` if you have not already. The installer builds the Mac app with Swift, so the
+   Command Line Tools are required.
+2. Open the DMG, Control-click `Install aeroandroid.command` and choose **Open**, then **Open** again.
+   On macOS 15, if it was blocked: **System Settings → Privacy & Security → Open Anyway**.
+3. Accept the Android SDK license when asked (type `YES`) and wait. The script copies the source to
+   `~/aeroandroid` and runs `build.sh`. In mainland China, type `y` at the mirror prompt, or press Return
+   and let it choose. When it finishes it opens `~/Applications/Android Subsystem.app`.
+
+Use that installed copy. The `Android Subsystem.app` inside the DMG is a prebuilt sample so you can confirm
+the app opens on your Mac. Do not use it as your install: its Android-side bridge is signed differently from
+the copy built on your Mac, and mixing the two fails with `Guest bridge install failed`.
 
 The installer saves a Quick Boot snapshot at the end, so the first app you open starts in seconds instead of
-cold booting (the snapshot takes disk space about equal to the memory setting). Open Android Subsystem once:
-that makes the APK installer the default app for `.apk` files. From then on, double-clicking any APK is all it takes.
+cold booting (the snapshot takes disk space about equal to the memory setting). Open the installed Android
+Subsystem once: that makes the APK installer the default app for `.apk` files. From then on, double-clicking
+any APK is all it takes.
 
 **Android 17** (API 37) is the default: Google's stable `android-37.0` image (arm64 or x86_64) and emulator 37.2.13, pinned in
 `scripts/runtime-lock-17.json` (`-x86_64` for Intel). Root uses Magisk v31.0, the first release with Zygisk for API 37; Vector and microG
@@ -59,11 +69,16 @@ see [`BUILD.md`](BUILD.md) for contributor flags. Examples:
 
 ## Signing and downloads
 
-Release builds are signed ad hoc (free, no Apple Developer account), including the installer helper and the DMG,
-so macOS does not call the app "damaged". Without a paid Developer ID and notarization macOS still says it cannot
-verify the developer: right-click the app and choose Open, or run
-`xattr -dr com.apple.quarantine "/Applications/Android Subsystem.app"`. Mac apps the subsystem creates for your
-Android apps are made and signed on your own Mac, so they open without any prompt.
+Release builds are ad-hoc signed (free, no Apple Developer ID), including the installer and the DMG. Gatekeeper
+says it cannot verify the developer. It does not say the file is damaged. Control-click `Install aeroandroid.command`
+(and, if macOS still blocks the installed app, `~/Applications/Android Subsystem.app`) and choose **Open**.
+On macOS 15 use **System Settings → Privacy & Security → Open Anyway**. If it still blocks the installed app:
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Applications/Android Subsystem.app"
+```
+
+Mac apps the subsystem creates for your Android apps are made and signed on your own Mac, so they open without that prompt.
 
 ## How it fits together
 
@@ -163,6 +178,6 @@ produced by the build scripts.
 
 ## License
 
-Apache-2.0, Copyright 2026 daniel.ye叶子诚. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for third-party components,
+Apache-2.0, Copyright 2026 daniel.ye. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for third-party components,
 and [`docs/LICENSING.md`](docs/LICENSING.md) for what you must do if you redistribute a build that contains them
 (the Android SDK components and the GPL parts are downloaded onto your Mac, not shipped by this project).

@@ -3,7 +3,7 @@ set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
 # One place for the version (the VERSION file) and the copyright line; both Info.plists are rendered from them.
 version="$(tr -d '[:space:]' < "$project_root/VERSION")"
-copyright='Copyright © 2026 daniel.ye叶子诚'
+copyright='Copyright © 2026 daniel.ye'
 render() { sed -e "s|@VERSION@|$version|g" -e "s|@COPYRIGHT@|$copyright|g"; }
 [[ "$(uname -s)" == Darwin ]] || { echo 'Build on a Mac.' >&2; exit 1; }
 # Local builds target this Mac. AEROANDROID_UNIVERSAL=1 builds arm64 + x86_64 in one binary (releases).
