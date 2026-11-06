@@ -1,38 +1,23 @@
-M5 / Apple Silicon · Android Subsystem 0.2.0
-Pure AOSP Android 16 + Magisk + microG
+aeroandroid
 
-1. Unzip M5-Android16-0.2.0-AOSP-microG.zip. The source code and all offline runtime dependencies are bundled together:
+Install from the official macOS DMG. You do not package or compile anything yourself.
+Download it from the latest GitHub release or https://aeroandroid.com/releases.html,
+open the disk image, and right-click "安装 aeroandroid.command" → Open.
 
-   M5-Android16-0.2.0-AOSP-microG/
-     Build.command
-     AndroidSubsystem/
-       Build.command
-       Install.command
-       Migrate-to-AOSP.command
-     runtime-cache/
-       android16-macos/
-       mac-tools/
-       provision/
+The DMG contains the manager app, the installer, and the source. The Android runtime
+(about 1.8 GB) is downloaded on your Mac during installation and checked with SHA-256.
+The Android SDK license does not allow that runtime to be redistributed inside the DMG.
 
-2. You need macOS 14 or later, the Xcode Command Line Tools, and at least 20 GB of free space.
-   If the developer tools are not installed, run first: xcode-select --install
-3. Double-click the top-level Build.command. It prepares the offline environment, builds the native app,
-   configures Magisk, microG and the signature-compatibility module, and installs to ~/Applications/Android Subsystem.app.
-   You will need to read and accept the Android SDK license. No separate Python, Java or Homebrew install is needed.
-4. For an existing installation, it first quits the manager app, stops the VM using the backend that matches the
-   current configuration, and then backs up the configuration. Existing memory settings such as 6 GB are kept.
-   AOSP uses a separate Android data environment, so apps need to be reinstalled; old user data is kept as an
-   offline backup. The old Google APIs system image is deleted only after the new environment is configured successfully.
-5. After installing, open "Self-Check" in microG settings, then verify the apps you actually need.
-   By default it does not sign in to Google or enable device registration or push messaging. See docs/MICROG.md.
+Requires a Mac (Apple Silicon, or Intel from 2018 on), macOS 14 or later, the Xcode
+Command Line Tools (xcode-select --install), about 20 GB of free disk, and a network
+connection.
 
-This package does not include GApps, the Google Play Store, Chrome or the proprietary DroidGuard.
-microG is an open-source compatibility implementation; a successful install does not guarantee that every GMS API or Play Integrity works.
-APK build, signing and controlled testing have passed; on-device acceptance of the new AOSP/microG build on an M5 is still pending.
-Commercial distribution must still comply with the SDK and each open-source component's license; see README.md for details.
+The default install is the full edition: Android 17, AOSP, Magisk, and microG.
+  Android 16:          ./build.sh --android 16
+  AOSP only:           ./build.sh --pure
+  --with-gpl           alias of the default full edition
 
-If you only downloaded AndroidSubsystem-source.zip, provide a runtime-cache that matches runtime-lock.json;
-it can sit next to the source folder or inside it. The full single package needs no extra downloads.
-The log path is shown whether the build succeeds or fails; press Enter in Terminal to close.
-Logs are in ~/Library/Application Support/AndroidSubsystem/logs/.
-If you run into problems, please provide the install log; scripts/collect-diagnostics.py collects diagnostics and never uploads anything automatically.
+Building from a git checkout uses the same ./build.sh. See README.md and BUILD.md.
+
+Logs: ~/Library/Application Support/AndroidSubsystem/logs/
+If something fails, scripts/collect-diagnostics.py collects diagnostics and does not upload them.

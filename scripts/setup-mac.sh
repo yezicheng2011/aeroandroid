@@ -9,7 +9,8 @@ command -v brew >/dev/null || { echo 'Install Homebrew from https://brew.sh, the
 xcrun --find swift >/dev/null || { echo 'Install Xcode Command Line Tools with xcode-select --install.' >&2; exit 1; }
 brew install python scrcpy openjdk@17
 brew install --cask android-commandlinetools
-export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export JAVA_HOME
 sdk_root="${ANDROID_SUBSYSTEM_SDK:-$HOME/Library/Android/sdk}"
 manager="$(brew --prefix)/share/android-commandlinetools/cmdline-tools/latest/bin/sdkmanager"
 mkdir -p "$sdk_root"

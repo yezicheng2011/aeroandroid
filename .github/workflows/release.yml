@@ -112,7 +112,7 @@ jobs:
           # Installer smoke test from the mounted image: copies source, then build.sh prints help.
           HOME="$RUNNER_TEMP/inst-home" bash "$mnt/安装 aeroandroid.command" --help
           test -x "$RUNNER_TEMP/inst-home/aeroandroid/build.sh"
-          HOME="$RUNNER_TEMP/inst-home" bash "$RUNNER_TEMP/inst-home/aeroandroid/build.sh" --check || echo "(--check reported missing prerequisites on the runner; informational)"
+          HOME="$RUNNER_TEMP/inst-home" bash "$RUNNER_TEMP/inst-home/aeroandroid/build.sh" --check
           hdiutil detach "$mnt"
       - uses: actions/upload-artifact@v4
         with: { name: macos, path: out/* }

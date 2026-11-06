@@ -22,13 +22,23 @@ window per app, plus an Android-side bridge for input, clipboard and notificatio
 
 ## Install
 
+Download the official macOS DMG from the [latest GitHub release](https://github.com/yezicheng2011/aeroandroid/releases)
+or [aeroandroid.com/releases](https://aeroandroid.com/releases.html), open it, and run the installer
+(`安装 aeroandroid.command`, right-click → Open). That is the whole install. You do not package or compile anything yourself.
+The DMG is the manager app, the installer, and the source. The Android runtime (about 1.8 GB) is downloaded on your Mac
+during installation and checked with SHA-256, because the Android SDK license does not allow it to be redistributed.
+
 Requires a Mac (Apple Silicon, or an Intel Mac from 2018 on), macOS 14+, the Xcode Command Line Tools (`xcode-select --install`),
 about 20 GB of free disk and an internet connection (about 1.8 GB of Android runtime plus the apps).
 
+To build from this source tree instead of the DMG, `./build.sh` is the same installer the DMG runs. The default is the
+full edition. `--with-gpl` is only an alias of that default. `--pure` is what skips Magisk, microG, and the GPL-3.0 parts.
+
 ```bash
-./build.sh                # Android 17: AOSP + Magisk root + microG + pre-installed apps
+./build.sh                # default: Android 17, full edition (AOSP + Magisk + microG + pre-installed apps)
 ./build.sh --android 16   # Android 16 instead
 ./build.sh --pure         # AOSP only: no Magisk, no microG, no GPL-3.0 parts
+./build.sh --with-gpl     # alias of the default full edition
 ./build.sh --mirror cn    # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ```
 
@@ -36,8 +46,8 @@ about 20 GB of free disk and an internet connection (about 1.8 GB of Android run
 `scripts/runtime-lock-17.json` (`-x86_64` for Intel). Root uses Magisk v31.0, the first release with Zygisk for API 37; Vector and microG
 are the same pinned builds as on 16. The microG signature module hooks `ComputerEngine`, whose methods are unchanged
 in Android 17 (checked against `android-17.0.0_r1`); `build.sh` only widens its Android-16-only gate to admit API 37.
-**Not yet run on a Mac.** If the Android 17 install fails, `build.sh` offers to retry on Android 16, which stays
-fully supported.
+End-to-end acceptance of Android 17 with Magisk and microG on a physical Mac is still open (`docs/VALIDATION.md`).
+The default stays Android 17. If that install fails, `build.sh` offers to retry on Android 16, which stays fully supported.
 
 The installer saves a Quick Boot snapshot at the end, so the first app you open starts in seconds instead of
 cold booting (the snapshot takes disk space about equal to the memory setting).
@@ -91,11 +101,12 @@ run them, so the full install adds a translator:
 - Apps translated this way are slower than native ones. Apps with x86_64 code, and the pre-installed Fennec
   (an x86_64 build is chosen automatically), run natively.
 
-**Not run end to end on a Mac.** I checked the pieces against Google's real Android 16 and 17 images and booted
-the result in an emulator: the translator files and the 14 properties were identical to Google's image, root and
-the module installed, and Android listed `arm64-v8a`. The emulator available to me has no hardware acceleration, so an
-arm64 program crashed inside the translator there, exactly as on Google's own image; only a Mac can show it running.
-On an Intel Mac, the first run prints a notice, and Settings → Check runtime environment lists the CPU types.
+**Checked against the system images; end-to-end acceptance on a Mac is still open.** The translator files and the
+14 properties match Google's Android 16 and 17 images. Booted in an emulator, root and the module installed, and
+Android listed `arm64-v8a`. That emulator had no hardware acceleration, so an arm64 program crashed inside the
+translator there, the same as on Google's own image without acceleration. Only a Mac with hardware acceleration can
+show that program running. On an Intel Mac, the first run prints a notice, and Settings → Check runtime environment
+lists the CPU types.
 
 ## Restricted networks (for example mainland China)
 

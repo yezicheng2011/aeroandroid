@@ -11,9 +11,10 @@
 
 ### One command
 ```bash
-./build.sh                 # auto-pick mirror, build and install the pure-AOSP edition
+./build.sh                 # default: full edition (AOSP + Magisk + microG), auto-pick mirror
+./build.sh --pure          # AOSP only: no Magisk, no microG, no GPL-3.0 parts
+./build.sh --with-gpl      # alias of the default full edition
 ./build.sh --mirror cn     # mainland China: GitHub via proxy, Android SDK via Tencent mirror
-./build.sh --with-gpl      # full edition: also fetch GPL-3.0 parts, install Magisk + microG
 ./build.sh --android 16    # Android 16 instead of the default Android 17 (API 37)
 ./build.sh --no-arm-translation   # Intel Macs: skip ARM translation (saves a 2 GB download and 8 GB of disk)
 ./build.sh --check         # prerequisites only
@@ -21,10 +22,10 @@
 ```
 Environment: `GH_MIRROR` (default `https://gh-proxy.com/`), `SDK_MIRROR` (default `https://mirrors.cloud.tencent.com/AndroidSDK/`), `ANDROID_SUBSYSTEM_CACHE`. Mirrors only change where bytes come from; every file is still checked against its pinned SHA-256, and the official URL is used as a fallback.
 
-Flow: check prerequisites → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, plus the microG parts with `--with-gpl`) → run `Install.command`, which builds the Mac app and installs. Then open `dist/Android Subsystem.app` and run `Graphics-Acceptance.command`.
+Flow: check prerequisites → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, and, in the default full edition, the microG parts) → run `Install.command`, which builds the Mac app and installs. Then open `dist/Android Subsystem.app` and run `Graphics-Acceptance.command`.
 
 ### GPL components
-This repository is Apache-2.0. The microG signature module (`microg-spoof/`, derived from FakeGApps) and Magisk's `host_patch.sh` are GPL-3.0 and are not included. Only with `--with-gpl` does `build.sh` download them from upstream (SHA-256 checked) and print a license notice; they remain GPL-3.0 and must not be redistributed as Apache-2.0. Without the flag you get the pure-AOSP graphics edition, without Magisk or microG.
+This repository is Apache-2.0. The microG signature module (`microg-spoof/`, derived from FakeGApps) and Magisk's `host_patch.sh` are GPL-3.0 and are not included in git. The default `./build.sh` (the full edition) downloads them from upstream, checks SHA-256, and prints a license notice. `--with-gpl` is an alias of that default. They remain GPL-3.0 and must not be redistributed as Apache-2.0. `./build.sh --pure` skips them and installs AOSP without Magisk or microG.
 
 ### Troubleshooting
 - **"Requires a Mac"**: only macOS is supported, on Apple Silicon or Intel; not Linux or Windows.
@@ -35,4 +36,4 @@ This repository is Apache-2.0. The microG signature module (`microg-spoof/`, der
 - **SDK license**: the installer shows the Android SDK license for you to accept.
 - **Disk space**: 20 GB minimum; the full edition needs more for guest data.
 - **Logs**: `~/Library/Application Support/AndroidSubsystem/logs/`; diagnostics via `scripts/collect-diagnostics.py`.
-- **Don't want to build**: download the full offline package at https://aeroandroid.com/releases.html.
+- **Don't want to build**: download the official macOS DMG from the latest GitHub release or https://aeroandroid.com/releases.html and run the installer. You do not package the app yourself. The DMG does not contain the Android SDK; the installer downloads that runtime on your Mac.

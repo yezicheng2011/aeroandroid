@@ -26,7 +26,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>安卓子系统</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0.0</string>
+<key>CFBundleShortVersionString</key><string>1.0.1</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>NSHumanReadableCopyright</key><string>Copyright © 2026 daniel.ye叶子诚</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
@@ -56,7 +56,7 @@ cat > "$helper/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>AndroidSubsystem</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0.0</string>
+<key>CFBundleShortVersionString</key><string>1.0.1</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>NSHumanReadableCopyright</key><string>Copyright © 2026 daniel.ye叶子诚</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>

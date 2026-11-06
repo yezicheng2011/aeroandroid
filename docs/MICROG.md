@@ -1,6 +1,6 @@
-# Pure AOSP Android 16 and microG
+# Pure AOSP and microG
 
-This version uses the pure AOSP image `system-images;android-36;default;arm64-v8a`. microG Services / Companion are open-source implementations compatible with Google APIs, using the compatible package names `com.google.android.gms` and `com.android.vending`. They are not Google's official Play services or Play Store, and they do not provide the store's app catalogue. GSFProxy forwards the legacy GSF broadcast interface.
+The installer default is the full edition on Android 17 (`system-images;android-37.0;default;arm64-v8a`, or the x86_64 image on Intel). `./build.sh --android 16` uses `system-images;android-36;default;arm64-v8a`. `./build.sh --pure` skips microG; `--with-gpl` is an alias of the default. microG Services / Companion are open-source implementations compatible with Google APIs, using the compatible package names `com.google.android.gms` and `com.android.vending`. They are not Google's official Play services or Play Store, and they do not provide the store's app catalogue. GSFProxy forwards the legacy GSF broadcast interface.
 
 GApps, Google Chrome and the proprietary DroidGuard are not included. No account is signed in automatically, and Google device registration and cloud push messaging are not enabled automatically. When network services are needed, the user chooses them explicitly in microG settings; a successful install does not mean Play Integrity, DRM, banking apps, game anti-cheat or every Google API will work.
 
