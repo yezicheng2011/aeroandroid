@@ -318,10 +318,9 @@ final class SubsystemModel: ObservableObject {
         let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path
         Task { _ = try? await backend.call("refresh-launchers", ["app_path": Bundle.main.bundleURL.path, "destination": folder]) }
     }
-    func saveConfiguration(android: Int, memory: Int, cores: Int, fps: Int, gpu: String) {
+    func saveConfiguration(memory: Int, cores: Int, fps: Int, gpu: String) {
         operation(L10n.t("prog.save_config")) {
-            _ = try await self.backend.call("configure", ["android": android, "memory_mb": memory,
-                                                        "cores": cores, "fps": fps, "gpu": gpu])
+            _ = try await self.backend.call("configure", ["memory_mb": memory, "cores": cores, "fps": fps, "gpu": gpu])
         }
     }
     func showLogs() {
@@ -464,7 +463,6 @@ struct FilesView: View {
 
 struct RuntimeView: View {
     @EnvironmentObject var model: SubsystemModel
-    @CompatibleState<Int> private var android = 17
     @CompatibleState<Int> private var memory = 4096
     @CompatibleState<Int> private var cores = 4
     @CompatibleState<Int> private var fps = 30
@@ -483,9 +481,10 @@ struct RuntimeView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section(model.t("settings.runtime")) {
-                Picker(model.t("settings.android_ver"), selection: $android) {
-                    Text("Android 17 · API 37").tag(17)
-                    Text("Android 16 · API 36").tag(16)
+                HStack {
+                    Text(model.t("settings.android_ver"))
+                    Spacer()
+                    Text("Android 17 · API 37").foregroundStyle(.secondary)
                 }
                 Text(model.t("settings.android_hint"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -501,7 +500,7 @@ struct RuntimeView: View {
                     Text(model.t("settings.gpu.host")).tag("host")
                 }
                 Text(model.t("settings.gpu_hint")).font(.caption).foregroundStyle(.secondary)
-                Button(model.t("settings.save")) { model.saveConfiguration(android: android, memory: memory, cores: cores, fps: fps, gpu: gpu) }
+                Button(model.t("settings.save")) { model.saveConfiguration(memory: memory, cores: cores, fps: fps, gpu: gpu) }
                     .disabled(model.busy || model.state == "running" || model.state == "booting")
                 Text(model.t("settings.config_hint"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -530,7 +529,6 @@ struct RuntimeView: View {
             }
         }.formStyle(.grouped)
         .onAppear {
-            android = model.android
             memory = model.config["memory_mb"] as? Int ?? 4096
             cores = model.config["cores"] as? Int ?? 4
             fps = min(60, model.config["fps"] as? Int ?? 30)
@@ -545,8 +543,8 @@ struct MainView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Image(systemName: "square.stack.3d.up.fill").font(.title2).foregroundStyle(.green)
+                HStack(spacing: 10) {
+                    LogoView().frame(width: 30, height: 30)
                     Text(model.t("app.title")).font(.headline)
                 }.padding(.horizontal, 16).padding(.top, 22)
                 List(selection: $section) {

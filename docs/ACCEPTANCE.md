@@ -5,7 +5,7 @@ This currently needs to be completed on the user's M5. Confirm the build and bas
 For a full install, run `Build.command` first (use `Migrate-to-AOSP.command` if you have the earlier Google-image version), then run `Graphics-Acceptance.command`. To troubleshoot graphics alone, use `Graphics-Install.command`, which skips root and microG. The automated results and actual-pixel PNGs of the two apps are saved under `acceptance/<date-time>` in the local run directory. The automated report contains no authentication token. The two native windows opened afterwards need a manual check of the actual picture and interaction; the existence of the PNGs does not replace Metal acceptance. When checking pure AOSP / microG, also complete the [microG self-check](MICROG.md).
 
 1. Double-click Install.command and note any Swift / Metal compile errors. On success the app should be in ~/Applications.
-2. On the Settings page, click "Check runtime environment" and confirm that Apple Silicon, hardware acceleration, the Android 16 ARM64 image and ADB are all available.
+2. On the Settings page, click "Check runtime environment" and confirm that Apple Silicon, hardware acceleration, the Android 17 image for your chip (ARM64 or x86_64) and ADB are all available.
 3. Click Start; once startup completes, the app library should show app labels and icons.
 4. Open Android Settings (com.android.settings) and confirm it is displayed inside a native Mac window. It should belong to the Android Subsystem process, not a scrcpy window.
 5. Open a second Android app and move and resize both windows at the same time. Changing one window must not change the other's content.

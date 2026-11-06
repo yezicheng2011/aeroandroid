@@ -72,7 +72,10 @@ elif name == 'adb':
         elif command[0] == 'test': sys.exit(1)
         elif command[0] == 'find': print('/sdcard/Download/MacBridge/test.txt')
     elif args[0] in ['install', 'install-multiple', 'uninstall']:
-        if args[0] != 'uninstall' and Path(args[-1]).read_bytes() == b'arm64 only': print('Failure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries, res=-113]')
+        if args[0] != 'uninstall' and Path(args[-1]).read_bytes() == b'arm64 only':
+            # Like the real adb: the reason goes to stderr and the exit code says it failed.
+            print('adb: failed to install game.apk: Failure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries, res=-113]', file=sys.stderr)
+            sys.exit(1)
         else: print('Success')
     elif args[0] == 'push': print('1 file pushed')
     elif args[0] == 'pull': (Path(args[2]) / Path(args[1]).name).write_text('android data')

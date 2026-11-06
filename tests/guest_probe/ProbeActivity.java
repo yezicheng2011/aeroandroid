@@ -16,7 +16,7 @@ public final class ProbeActivity extends Activity {
         super.onCreate(state);
         LinearLayout root = new LinearLayout(this); root.setOrientation(1);
         root.setPadding(24,24,24,24); root.setBackgroundColor(Color.WHITE);
-        TextView title = new TextView(this); title.setText("Graphics Probe / Android 16");
+        TextView title = new TextView(this); title.setText("Graphics Probe / Android 17");
         title.setTextColor(Color.BLACK); title.setTextSize(25); root.addView(title);
         for (int color : new int[]{Color.RED, Color.GREEN, Color.BLUE}) {
             TextView bar = new TextView(this); bar.setBackgroundColor(color);

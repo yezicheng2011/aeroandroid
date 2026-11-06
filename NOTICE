@@ -17,7 +17,7 @@ Third-party components downloaded at build/run time on the user's own Mac (NOT i
 - OpenJDK 17 (Eclipse Temurin, GPL-2.0 with Classpath Exception)
 - python-build-standalone CPython 3.12 (PSF License)
 - scrcpy v5.0.1 (Apache-2.0)
-- Magisk v30.7 (Android 16) / v31.0 (Android 17) and its host_patch.sh (GPL-3.0)
+- Magisk v31.0 and its host_patch.sh (GPL-3.0)
 - Vector (LSPosed fork) v2.2 (GPL-3.0)
 - microG GmsCore and microG Companion APKs (Apache-2.0)
 - Aurora Store (GPL-3.0-or-later) and Fennec F-Droid (MPL-2.0), pre-installed from pinned F-Droid APKs

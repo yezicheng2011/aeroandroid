@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Provision this project's AVD with persistent Magisk.
 
-The patched boot image is private to this runtime. Real boot (API 36 or 37, arm64 or x86_64) and
+The patched boot image is private to this runtime. Real boot (Android 17 / API 37, arm64 or x86_64) and
 Magisk behavior must be accepted on the user's Mac.
 """
 from __future__ import annotations
@@ -21,11 +21,9 @@ spec = importlib.util.spec_from_file_location('subsystem', PROJECT / 'backend/su
 subsystem = importlib.util.module_from_spec(spec); spec.loader.exec_module(subsystem)
 
 
-def lock_file(android, arch='arm64'):
-    """The pinned runtime for an Android version and Mac architecture:
-    runtime-lock.json (16), runtime-lock-17.json, and a -x86_64 suffix for Intel Macs."""
-    name = 'runtime-lock' + ('' if android == 16 else f'-{android}') + ('' if arch == 'arm64' else f'-{arch}')
-    return PROJECT / 'scripts' / (name + '.json')
+def lock_file(arch='arm64'):
+    """The pinned runtime for a Mac architecture: runtime-lock.json, or runtime-lock-x86_64.json on an Intel Mac."""
+    return PROJECT / 'scripts' / ('runtime-lock' + ('' if arch == 'arm64' else f'-{arch}') + '.json')
 
 
 def digest(path):
@@ -39,8 +37,8 @@ MAGISK_ENV = '/data/adb/magisk'
 
 
 def magisk_apk(cache, controller):
-    """The pinned Magisk APK for this Android version, from the verified cache."""
-    lock = json.loads(lock_file(controller.config['android'], controller.arch).read_text())
+    """The pinned Magisk APK, from the verified cache."""
+    lock = json.loads(lock_file(controller.arch).read_text())
     entry = next(e for e in lock['archives'] if e.get('kind') == 'magisk')
     path = cache / entry['relative_path']
     if not path.is_file() or digest(path) != entry['sha256']:
@@ -124,8 +122,8 @@ def verify(controller):
 
 def provision(cache, root=None):
     c = subsystem.Controller(root)
-    if c.config['android'] not in (16, 17): raise RuntimeError('This pinned Magisk profile supports Android 16 and 17 only')
-    lock = json.loads(lock_file(c.config['android'], c.arch).read_text())
+    if c.config['android'] != 17: raise RuntimeError('This pinned Magisk profile supports Android 17 only')
+    lock = json.loads(lock_file(c.arch).read_text())
     assets = {}
     for entry in lock['archives']:
         if entry.get('kind') == 'magisk':

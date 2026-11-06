@@ -7,7 +7,7 @@ android_jar="$sdk_root/platforms/android-36/android.jar"
 java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}"
 if [[ -n "${JAVA_HOME:-}" ]]; then export PATH="$JAVA_HOME/bin:$PATH"; fi
 if [[ ! -f "$android_jar" || ! -x "$tools/aapt2" ]]; then
-  echo 'Android 16 platform and Build Tools 36.0.0 are required.' >&2; exit 1
+  echo 'Android SDK platform 36 and Build Tools 36.0.0 are required.' >&2; exit 1
 fi
 build="$project_root/work/guest"
 mkdir -p "$build/classes" "$build/dex" "$project_root/artifacts"

@@ -25,8 +25,8 @@ connection. The installer builds the Mac app with Swift, so the Command Line Too
 are required.
 
 The default install is the full edition: Android 17, AOSP, Magisk, microG, Aurora Store,
-and Fennec.
-  Android 16:          ./build.sh --android 16
+and Fennec. Android 17 is the only Android version (Android 16 has been removed; running
+the installer upgrades an older install and keeps its apps and data as a backup).
   AOSP only:           ./build.sh --pure
   --with-gpl           alias of the default full edition
 

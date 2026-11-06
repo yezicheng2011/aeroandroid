@@ -85,4 +85,4 @@ those terms.
   unsettled in some countries.
 - **Pre-installed apps and Google services.** microG is a separate open-source implementation. No Google
   proprietary code or services are distributed here.
-- **Design-time tools.** `scripts/make-logo.py` needs Pillow and numpy; they are not shipped.
+- **Design-time tools.** `scripts/make-logo.py` needs nothing beyond the standard library for the SVGs; `--raster` (the PNG and `AppIcon.icns`) needs Pillow and numpy. They are not shipped.

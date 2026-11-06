@@ -161,7 +161,9 @@ func runInstaller() -> Never {
 final class InstallerDelegate: NSObject, NSApplicationDelegate {
     private let backend = Backend()
     private let panel = StatusPanel()
-    private var urls: [URL] = []
+    private var arriving: [URL] = []   // files from open events a moment apart: one split-APK set
+    private var waiting: [[URL]] = []  // sets still to install, in the order they were opened
+    private var installing = false
     private var started = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -169,13 +171,17 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
         // Opened by double-clicking an .apk, the open-files event arrives right after launch;
         // opened directly, there is nothing to install yet, so ask for a file.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [self] in
-            if urls.isEmpty && !started { choose() }
+            if arriving.isEmpty && waiting.isEmpty && !started { choose() }
         }
     }
     func application(_ application: NSApplication, open urls: [URL]) {
-        self.urls += urls.filter { $0.pathExtension.lowercased() == "apk" }
-        // Finder delivers a multi-file selection in one event; start once it has arrived.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in begin() }
+        arriving += urls.filter { $0.pathExtension.lowercased() == "apk" }
+        // Finder delivers a multi-file selection in one event; wait a moment so that all of it has arrived.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            guard !arriving.isEmpty else { return }
+            waiting.append(arriving); arriving = []
+            installNext()
+        }
     }
     private func choose() {
         let panel = NSOpenPanel()
@@ -183,11 +189,14 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
         panel.allowedContentTypes = [UTType(filenameExtension: "apk") ?? .data]
         panel.allowsMultipleSelection = true
         NSApp.activate(ignoringOtherApps: true)
-        if panel.runModal() == .OK { urls = panel.urls; begin() } else { NSApp.terminate(nil) }
+        if panel.runModal() == .OK { waiting.append(panel.urls); installNext() } else { NSApp.terminate(nil) }
     }
-    private func begin() {
-        guard !started, !urls.isEmpty else { return }
-        started = true
+    /// One set at a time. APKs opened while an install is running wait their turn; they used to be dropped
+    /// when the helper quit at the end of the first install.
+    private func installNext() {
+        guard !installing, !waiting.isEmpty else { return }
+        installing = true; started = true
+        let urls = waiting.removeFirst()
         panel.show(L10n.t("install.working"))
         Task {
             do {
@@ -202,7 +211,8 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 panel.hide(); showAlert(L10n.t("install.failed"), error)
             }
-            NSApp.terminate(nil)
+            installing = false
+            if waiting.isEmpty && arriving.isEmpty { NSApp.terminate(nil) } else { installNext() }
         }
     }
 }

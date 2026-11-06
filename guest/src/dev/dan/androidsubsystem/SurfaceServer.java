@@ -120,6 +120,8 @@ public final class SurfaceServer {
         long framesSent;
         boolean imageCallbackLogged;
         byte[] pixels;
+        Image pending;              // the newest picture that came in before its turn (image thread only)
+        boolean sendScheduled;      // a delayed sendPending() is queued (image thread only)
         Session(Socket s) throws Exception { socket = s; input = new DataInputStream(s.getInputStream()); output = new DataOutputStream(s.getOutputStream()); }
         JSONObject readControl() throws Exception {
             int type = input.readUnsignedByte(), length = input.readInt();
@@ -219,14 +221,35 @@ public final class SurfaceServer {
         static void validateSize(int w, int h, int density) {
             if (w < 320 || h < 320 || w > 2560 || h > 2560 || density < 100 || density > 640) throw new IllegalArgumentException("Bad display size");
         }
+        /** Called on the image thread for every new picture. Pictures that come in faster than the frame rate
+         * are not thrown away: the newest one waits for its turn. Dropping it would leave the Mac on a stale
+         * picture whenever the last change of a burst (a scroll ending, the last typed letter) lands inside the
+         * interval, because a still screen produces no further pictures. */
         void frame(ImageReader source) {
             if (closed.get() || source != reader) return;
             if (!imageCallbackLogged) { imageCallbackLogged = true; logDisplay("first-image-callback"); }
-            try (Image image = source.acquireLatestImage()) {
+            try {
+                Image image = source.acquireLatestImage();
                 if (image == null) return;
-                long now = SystemClock.elapsedRealtimeNanos();
-                if (now - lastFrame < 1000000000L / fps) return;
-                lastFrame = now;
+                if (pending != null) pending.close();
+                pending = image;
+                long wait = lastFrame + 1000000000L / fps - SystemClock.elapsedRealtimeNanos();
+                if (wait <= 0) sendPending();
+                else if (!sendScheduled) {
+                    sendScheduled = true;
+                    imageHandler.postDelayed(() -> { sendScheduled = false; sendPending(); }, wait / 1000000 + 1);
+                }
+            } catch (Throwable failure) {
+                signalFailure("frame", failure);
+            }
+        }
+        /** Sends the waiting picture, if there is one. Image thread only. */
+        void sendPending() {
+            Image waiting = pending; pending = null;
+            if (waiting == null) return;
+            try (Image image = waiting) {
+                if (closed.get()) return;
+                lastFrame = SystemClock.elapsedRealtimeNanos();
                 Image.Plane plane = image.getPlanes()[0];
                 int w = image.getWidth(), h = image.getHeight(), stride = plane.getRowStride(), step = plane.getPixelStride();
                 if (step != 4) throw new IllegalStateException("Expected RGBA8 surface");
@@ -297,6 +320,7 @@ public final class SurfaceServer {
                         System.out.println("Surface resize package=" + packageName + " display=" + displayId
                                 + " size=" + w + "x" + h + " dpi=" + density);
                         ImageReader old = reader; next = newReader(w, h);
+                        if (pending != null) { try { pending.close(); } catch (RuntimeException ignored) { } pending = null; }   // it belongs to the old reader
                         display.setSurface(next.getSurface()); display.resize(w, h, density);
                         reader = next; width = w; height = h; dpi = density; lastFrame = 0;
                         old.close(); logDisplay("resized");

@@ -1,4 +1,10 @@
-<p align="center"><img src="assets/logo.svg" width="128" alt="aeroandroid logo"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo.svg" width="128" alt="aeroandroid logo">
+  </picture>
+</p>
 
 <h1 align="center">aeroandroid</h1>
 <p align="center"><b>Android apps as real Mac apps, on Apple Silicon and Intel Macs.</b><br>
@@ -50,10 +56,14 @@ cold booting (the snapshot takes disk space about equal to the memory setting). 
 Subsystem once: that makes the APK installer the default app for `.apk` files. From then on, double-clicking
 any APK is all it takes.
 
-**Android 17** (API 37) is the default: Google's stable `android-37.0` image (arm64 or x86_64) and emulator 37.2.13, pinned in
-`scripts/runtime-lock-17.json` (`-x86_64` for Intel). Root uses Magisk v31.0, the first release with Zygisk for API 37; Vector and microG
-are the same pinned builds as on 16. The microG signature module hooks `ComputerEngine`, whose methods are unchanged
-in Android 17 (checked against `android-17.0.0_r1`).
+**Android 17** (API 37) is the only Android version: Google's stable `android-37.0` image (arm64 or x86_64) and emulator 37.2.13,
+pinned in `scripts/runtime-lock.json` (`-x86_64` for Intel). Root uses Magisk v31.0, the first release with Zygisk for API 37.
+The microG signature module hooks `ComputerEngine`, whose methods are unchanged in Android 17 (checked against `android-17.0.0_r1`).
+
+**Coming from Android 16?** Android 16 has been removed. Run the installer once: it installs Android 17, carries your
+settings over and (in the full install) deletes the Android 16 system image to free disk space. Your Android 16 apps and data are not copied into
+Android 17; they stay as a backup in `~/Library/Application Support/AndroidSubsystem/avd/` (the `MacAndroid_16_*` folders).
+Delete them when you no longer need them.
 
 ### From source (optional, contributors)
 
@@ -62,7 +72,6 @@ see [`BUILD.md`](BUILD.md) for contributor flags. Examples:
 
 ```bash
 ./build.sh                # Android 17: AOSP + Magisk root + microG + pre-installed apps
-./build.sh --android 16   # Android 16 instead
 ./build.sh --pure         # AOSP only: no Magisk, no microG, no GPL-3.0 parts
 ./build.sh --mirror cn    # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ```
@@ -96,13 +105,13 @@ One executable plays three roles, chosen by its `Info.plist`:
 | `guest/` | Java bridge inside Android: frame transport, input method, notifications, clipboard, app icons |
 | `backend/subsystem.py` | Controller: boots the emulator, installs APKs, builds the Mac apps (`install-app`) |
 | `scripts/` | Build, provisioning (Magisk, microG), pre-installed apps (`preinstall.json`), logo generator |
-| `assets/` | Logo (`logo.svg`, `logo-1024.png`) and `AppIcon.icns` |
+| `assets/` | Logo in a light and a dark look (`logo.svg` switches by itself with the viewer's theme; `logo-light.svg`, `logo-dark.svg`, `logo-1024.png`) and `AppIcon.icns` |
 
 ## Intel Macs
 
 An Intel Mac gets everything above. `build.sh` detects the chip (also in a Rosetta shell on Apple Silicon) and installs
-the x86_64 emulator, system image, JDK, scrcpy and Python, each pinned by SHA-256 in `scripts/runtime-lock-x86_64.json`
-and `runtime-lock-17-x86_64.json`. The release DMG is a universal binary.
+the x86_64 emulator, system image, JDK, scrcpy and Python, each pinned by SHA-256 in `scripts/runtime-lock-x86_64.json`.
+The release DMG is a universal binary.
 
 **ARM translation.** Many Android apps, and most games, ship only arm64 code. The stock x86_64 Android image cannot
 run them, so the full install adds a translator:
@@ -118,7 +127,7 @@ run them, so the full install adds a translator:
 - Apps translated this way are slower than native ones. Apps with x86_64 code, and the pre-installed Fennec
   (an x86_64 build is chosen automatically), run natively.
 
-**Not run end to end on a Mac.** I checked the pieces against Google's real Android 16 and 17 images and booted
+**Not run end to end on a Mac.** I checked the pieces against Google's real Android 17 image and booted
 the result in an emulator: the translator files and the 14 properties were identical to Google's image, root and
 the module installed, and Android listed `arm64-v8a`. The emulator available to me has no hardware acceleration, so an
 arm64 program crashed inside the translator there, exactly as on Google's own image; only a Mac can show it running.
@@ -163,7 +172,7 @@ that every Google API, Play Integrity or banking app works. See [docs/MICROG.md]
 
 ## Known limits
 
-- macOS 14+ on Apple Silicon or Intel. Android 17 (default) or 16, AOSP. Android 17 root and microG, and Intel ARM translation, are new and untested on a Mac.
+- macOS 14+ on Apple Silicon or Intel. Android 17, AOSP. Root and microG on Android 17, and Intel ARM translation, are new and untested on a Mac.
 - The subsystem keeps running in the background after you close an app's window; stop it from the menu bar item.
 - Camera: the Mac camera is passed to the emulator as `webcam0` for both the front and back camera.
   macOS asks for camera permission the first time.
