@@ -71,10 +71,10 @@ components, you take on their terms:
 3. **Aurora Store and microG APKs**: the same, per each project's license; keep their notices.
 4. **`NOTICE`**: Apache-2.0 requires you to keep it, with the attribution lines, in any redistribution.
 
-> **Maintainer action:** the README points to an "offline package" at aeroandroid.com whose `runtime-cache/` holds
-> these components. If it still contains Android SDK archives, it conflicts with point 1, and with Magisk, Vector or
-> Aurora Store inside it, point 2 applies. Either remove those from the package, or make sure it is built and
-> published within those terms.
+The download users are pointed at is the official macOS DMG. It does not contain Android SDK archives, and users
+do not package the app themselves. Do not publish an "offline package" whose `runtime-cache/` bundles those
+archives (point 1) or Magisk, Vector, or Aurora Store (point 2) unless that package is built and published within
+those terms.
 
 ## Other points
 

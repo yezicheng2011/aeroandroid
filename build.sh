@@ -63,9 +63,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "${AEROANDROID_FORCE_ANDROID:-}" ]] && android="$AEROANDROID_FORCE_ANDROID"   # set by the fallback below
-export ANDROID_SUBSYSTEM_LOCK="$lock_file" AEROANDROID_ARM_TRANSLATION="$arm_translation"
 case "$android" in 16|17) ;; *) echo "--android must be 16 or 17" >&2; exit 2 ;; esac
 lock_file="$(lock_for "$android")"
+export ANDROID_SUBSYSTEM_LOCK="$lock_file" AEROANDROID_ARM_TRANSLATION="$arm_translation"
 case "$mirror" in auto|cn|global) ;; *) echo "--mirror must be cn, global or auto" >&2; exit 2 ;; esac
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }

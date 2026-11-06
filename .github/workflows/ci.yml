@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  python-and-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: bash -n and shellcheck
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find . -type f \( -name '*.sh' -o -name '*.command' \) \
+            -not -path './third_party/*' -not -path './.git/*' -print0)
+          [[ ${#files[@]} -gt 0 ]]
+          for f in "${files[@]}"; do bash -n "$f"; done
+          shellcheck "${files[@]}"
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 16
+        run: |
+          xc="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xc/Contents/Developer"
+          xcodebuild -version
+          swift --version
+      - name: Swift build
+        run: swift build --package-path macos

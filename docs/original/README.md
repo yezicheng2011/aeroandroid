@@ -1,5 +1,9 @@
 # Android Subsystem for Mac · Development Acceptance Build 0.2.0
 
+> **Historical.** This file describes the 0.2.0 acceptance layout. It is not the current installer.
+> The current default is Android 17, full edition (`./build.sh`). AOSP only is `./build.sh --pure`.
+> Install from the official DMG; you do not package the app yourself. See the repository README.
+
 Goal: provide a WSA-like desktop experience for Android apps on M5 / Apple Silicon Macs. The default runtime configuration is pure AOSP Android 16 (API 36) ARM64 + persistent Magisk root + open-source microG. The new image, root and microG need to be accepted on the M5. Android 17 (API 37) is enabled only when the corresponding ARM64 system image is available, and the system never silently downgrades to Android 15 or earlier.
 
 This version switches to the `default` pure AOSP image and does not include or install GApps, the Google Play Store, Google Play services or Google Chrome. microG Services and Companion use compatible package names, but they are open-source implementations; Companion is not a Google Play Store where you can browse and download apps. No Google account is signed in automatically, device registration and push messaging are not enabled automatically, and Google's proprietary DroidGuard is not included. Commercial distribution still requires separately handling the official SDK terms, GPL / LGPL corresponding source and license notices; using AOSP and microG does not automatically clear licensing for the whole distribution.
