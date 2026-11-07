@@ -27,6 +27,10 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Select Xcode 16
         run: |
           xc="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
@@ -35,6 +39,13 @@ jobs:
           swift --version
       - name: Swift build
         run: swift build --package-path macos
+      - name: Java to Swift frame compatibility, including small desktop widgets
+        run: |
+          mkdir -p work/wire-tests
+          javac --release 8 -d work/wire-tests guest/src/dev/dan/androidsubsystem/SurfaceWire.java tests/GenerateSurfaceFrame.java
+          java -cp work/wire-tests GenerateSurfaceFrame work/wire-tests/app.packet work/wire-tests/widget.packet
+          swiftc macos/Sources/AndroidSubsystem/GraphicsProtocol.swift macos/Sources/AndroidSubsystem/L10n.swift tests/GraphicsProtocolTests.swift -o work/wire-tests/check
+          work/wire-tests/check work/wire-tests/app.packet work/wire-tests/widget.packet
   guest-apk:
     runs-on: ubuntu-latest
     steps:
@@ -73,4 +84,6 @@ jobs:
         env:
           ANDROID_SUBSYSTEM_SDK: ${{ github.workspace }}/work/ci-sdk
           ANDROID_SUBSYSTEM_SIGNING_DIR: ${{ runner.temp }}/guest-signing
-        run: bash scripts/build-guest.sh
+        run: |
+          bash scripts/build-guest.sh
+          bash scripts/build-widget-probe.sh

@@ -53,6 +53,13 @@ public final class BridgeProvider extends ContentProvider {
                 result.put("icon", png(launch != null ? pm.getActivityIcon(launch) : pm.getApplicationIcon(pkg), 512, 48));
             } else if ("notifications".equals(endpoint)) {
                 result.put("notifications", new JSONArray(getContext().getSharedPreferences("bridge", 0).getString("events", "[]")));
+            } else if ("widget-providers".equals(endpoint) || "widgets".equals(endpoint)) {
+                // Widget services must see this host's UID, after verifying the shell's permission.
+                long identity = android.os.Binder.clearCallingIdentity();
+                try {
+                    if ("widget-providers".equals(endpoint)) result.put("providers", WidgetBridge.providers(getContext()));
+                    else result.put("widgets", WidgetBridge.instances(getContext()));
+                } finally { android.os.Binder.restoreCallingIdentity(identity); }
             } else if ("status".equals(endpoint)) {
                 NotificationManager manager = getContext().getSystemService(NotificationManager.class);
                 result.put("notification_access", manager.isNotificationListenerAccessGranted(new ComponentName(getContext(), BridgeNotifications.class)));
@@ -74,6 +81,31 @@ public final class BridgeProvider extends ContentProvider {
     @Override public String getType(Uri uri) { return "application/json"; }
     @Override public android.os.Bundle call(String method, String arg, android.os.Bundle extras) {
         getContext().enforceCallingOrSelfPermission("android.permission.DUMP", "ADB shell only");
+        if ("widget-create".equals(method) || "widget-delete".equals(method) || "widget-resize".equals(method) || "widget-info".equals(method)) {
+            if (arg == null || arg.length() > 4096) throw new IllegalArgumentException("Invalid widget request");
+            long identity = android.os.Binder.clearCallingIdentity();
+            try {
+                JSONObject request = new JSONObject(arg), response = new JSONObject();
+                if ("widget-create".equals(method)) {
+                    Object provider = request.get("provider");
+                    if (!(provider instanceof String)) throw new IllegalArgumentException("Invalid widget provider");
+                    response.put("widget", WidgetBridge.create(getContext(), (String) provider,
+                        WidgetBridge.sizeFromRequest(request, "width_dp"), WidgetBridge.sizeFromRequest(request, "height_dp")));
+                } else {
+                    int id = WidgetBridge.idFromRequest(request);
+                    if ("widget-delete".equals(method)) {
+                        WidgetBridge.delete(getContext(), id); response.put("deleted", true); response.put("id", id);
+                    } else if ("widget-info".equals(method)) response.put("widget", WidgetBridge.info(getContext(), id));
+                    else response.put("widget", WidgetBridge.resize(getContext(), id,
+                        WidgetBridge.sizeFromRequest(request, "width_dp"), WidgetBridge.sizeFromRequest(request, "height_dp")));
+                }
+                android.os.Bundle result = new android.os.Bundle();
+                result.putBoolean("accepted", true);
+                result.putString("payload", Base64.encodeToString(response.toString().getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
+                return result;
+            } catch (org.json.JSONException error) { throw new IllegalArgumentException("Invalid widget request", error);
+            } finally { android.os.Binder.restoreCallingIdentity(identity); }
+        }
         if ("storage-config".equals(method)) {
             if (arg == null || (!arg.isEmpty() && !arg.matches("[0-9a-f]{64}"))) {
                 throw new IllegalArgumentException("Invalid storage credential");

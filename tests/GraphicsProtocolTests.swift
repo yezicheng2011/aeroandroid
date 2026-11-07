@@ -26,6 +26,15 @@ struct GraphicsProtocolTests {
         var enormousWidth = body; enormousWidth[0] = 255; try reject(enormousWidth)
         var tooSmall = body; tooSmall[0] = 0; tooSmall[1] = 0; tooSmall[2] = 0; tooSmall[3] = 1; try reject(tooSmall)
         var trailing = body; trailing.append(0); try reject(trailing)
+        if CommandLine.arguments.count > 2 {
+            let widgetPacket = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2]))
+            try require(widgetPacket[0] == 1 && Int(widgetPacket.u32(at: 1)) == widgetPacket.count - 5, "Invalid widget envelope")
+            let widget = try SurfaceFrame.decode(widgetPacket.subdata(in: 5..<widgetPacket.count))
+            try require(widget.width == 64 && widget.height == 96 && widget.rowBytes == 256, "Small widget frame was rejected")
+            var belowMinimum = Data(repeating: 0, count: 20 + 63 * 96 * 4)
+            belowMinimum.replaceSubrange(0..<12, with: [0, 0, 0, 63, 0, 0, 0, 96, 0, 0, 0, 252])
+            try reject(belowMinimum)
+        }
         print("PASS: Java → Swift frame interoperability and 7 malformed-frame checks")
     }
 }

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Host real Android AppWidgets in retained Mac desktop windows with live updates, standard bind/configuration flows, input, saved positions and size reporting. Add a Widgets picker and independent instances; keep provider app launches in the same live surface with explicit Android Back navigation.
+- Build an original interactive widget probe in CI and test Java-to-Swift transport interoperability for small widget frames.
+
 - Add original SIP Phone and SIP Messages using the user's own account, with verified TLS/TCP signaling, G.711 RTP, encrypted account-password storage and Android default-role integration. Messages use SIP MESSAGE; carrier SMS requires a provider gateway. Enable emulator audio input and add Mac microphone usage descriptions. No SIP/codec dependency is added.
 
 - Share selected Mac folders directly through Android's document picker, with read/write or read-only access, seeking, in-place saves and no whole-file staging. Add native folder management, automatic reconnect, immediate revocation and protection against replacing an already open file. Retain the legacy copy exchange for apps without document-picker support.

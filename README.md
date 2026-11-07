@@ -25,7 +25,9 @@ and opens in its own window with nothing else on screen.</p>
    Android and Finder use the same files, with read-only or read/write access.
 5. **SIP phone and messages.** Use your own SIP account for voice and text, with no cellular-modem fallback.
    Carrier SMS requires a gateway from your provider.
-6. **Your Mac's camera works.** Android camera apps use the Mac's physical camera.
+6. **Android desktop widgets.** Add an app's actual Android widgets to the Mac desktop, with live updates,
+   buttons and scrolling. Android handles their original interaction.
+7. **Your Mac's camera works.** Android camera apps use the Mac's physical camera.
 
 Under the hood it is the official Android Emulator running the AOSP Android image for your Mac's chip, with a native Metal
 window per app, plus an Android-side bridge for input, clipboard and notifications.
@@ -179,6 +181,19 @@ Add more with `python3 scripts/preinstall-apps.py --pin <https APK url>` and pas
 
 microG is an open-source compatibility layer, not Google Play services: a successful install does not guarantee
 that every Google API, Play Integrity or banking app works. See [docs/MICROG.md](docs/MICROG.md).
+
+## Desktop widgets
+
+Start Android, open **Widgets** in the Mac manager, choose an installed widget and select **Add to desktop**.
+Complete Android's normal permission/configuration screens. Each widget then runs in its own desktop window;
+drag the title bar to move it, resize the window, and click or scroll its original Android controls.
+Positions, sizes and widget IDs are saved. Closing the manager window leaves the widgets running; quitting the
+manager or stopping Android suspends them until you reopen the manager and start Android.
+
+The host uses real Android AppWidget views. A button that opens an app temporarily raises that surface;
+**Back** returns through the app's Android navigation before the window settles onto the desktop again.
+Only apps that provide home-screen widgets appear. These are aeroandroid desktop windows, not Apple's WidgetKit
+gallery, and provider-specific compatibility still needs testing. See [docs/WIDGETS.md](docs/WIDGETS.md).
 
 ## Phone and messages over SIP
 

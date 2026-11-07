@@ -138,6 +138,10 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
     var reportError: ((String) -> Void)?
     var resizeDisplay: ((Int, Int, Int) -> Void)?
     var baseDPI = 200
+    var minimumGuestDimension = 320
+    var maximumGuestDimension = 1280
+    var transparentSurface = false
+    override var isOpaque: Bool { !transparentSurface }
     var guestWidth = 1280
     var guestHeight = 960
     private var resizeWork: DispatchWorkItem?
@@ -293,13 +297,13 @@ final class SurfaceView: MTKView, MTKViewDelegate, NSTextInputClient {
         requestGuestResize()
     }
     func requestGuestResize() {
-        guard bounds.width >= 320, bounds.height >= 320 else { return }
+        guard bounds.width >= CGFloat(minimumGuestDimension), bounds.height >= CGFloat(minimumGuestDimension) else { return }
         resizeWork?.cancel()
         // Keep Android at window-point resolution rather than doubling both axes
         // for Retina, which quadruples this uncompressed transport's byte rate.
-        let scale = min(1, 1280 / max(bounds.width, bounds.height))
-        let width = min(1280, max(320, Int(bounds.width * scale)))
-        let height = min(1280, max(320, Int(bounds.height * scale)))
+        let scale = min(1, CGFloat(maximumGuestDimension) / max(bounds.width, bounds.height))
+        let width = min(maximumGuestDimension, max(minimumGuestDimension, Int(bounds.width * scale)))
+        let height = min(maximumGuestDimension, max(minimumGuestDimension, Int(bounds.height * scale)))
         let density = min(640, max(100, Int(CGFloat(baseDPI) * scale)))
         let work = DispatchWorkItem { [weak self] in self?.resizeDisplay?(width, height, density) }
         resizeWork = work
@@ -378,19 +382,59 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
     private var failed = false
     private var firstFrameTimeout: DispatchWorkItem?
     private let gamepad = GamepadBridge()
+    private let desktopWidgetID: Int?
+    private var widgetOnDesktop = false
+    private var desktopFrame: NSRect?
+    private var changingWidgetFrame = false
     var onClosed: (() -> Void)?
     var onError: ((String) -> Void)?
-    init(app: AndroidApp, session: [String: Any]) throws {
+    init(app: AndroidApp, session: [String: Any], desktopWidgetID: Int? = nil) throws {
         guard let rawPort = session["port"] as? Int, (1024...65535).contains(rawPort) else {
             throw BridgeFailure(message: L10n.t("gfx.bad_port"))
         }
+        self.desktopWidgetID = desktopWidgetID
         package = app.package; transport = SurfaceConnection(port: UInt16(rawPort))
         surface = try SurfaceView(graphicsDevice: MTLCreateSystemDefaultDevice())
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 720),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = app.label; window.minSize = NSSize(width: 360, height: 360)
+        let widgetWidth = CGFloat(session["width"] as? Int ?? 320)
+        let widgetHeight = CGFloat(session["height"] as? Int ?? 240)
+        let contentSize = desktopWidgetID == nil ? NSSize(width: 960, height: 720)
+            : NSSize(width: max(160, widgetWidth), height: max(96, widgetHeight))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: contentSize),
+                              styleMask: desktopWidgetID == nil ? [.titled, .closable, .miniaturizable, .resizable]
+                                  : [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.title = app.label
+        window.minSize = desktopWidgetID == nil ? NSSize(width: 360, height: 360) : NSSize(width: 160, height: 96)
         window.contentView = surface; window.isReleasedWhenClosed = false; window.center()
         super.init(window: window); window.delegate = self
+        if let id = desktopWidgetID {
+            window.contentMaxSize = NSSize(width: 1280, height: 1280)
+            surface.minimumGuestDimension = 64
+            surface.maximumGuestDimension = 1280
+            surface.transparentSurface = true
+            surface.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            surface.layer?.isOpaque = false
+            window.backgroundColor = .clear; window.isOpaque = false
+            window.hidesOnDeactivate = false
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+            window.isMovableByWindowBackground = false
+            window.titlebarAppearsTransparent = true
+            if let saved = UserDefaults.standard.string(forKey: "desktopWidgetFrame.\(id)") {
+                let frame = NSRectFromString(saved)
+                if frame.width.isFinite && frame.height.isFinite && frame.origin.x.isFinite && frame.origin.y.isFinite,
+                   frame.width >= 160 && frame.height >= 96 && frame.width <= 2560 && frame.height <= 2560,
+                   NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
+                    window.setFrame(frame, display: false)
+                }
+            }
+            desktopFrame = window.frame
+            let back = NSButton(title: L10n.t("widgets.window_back"), target: self, action: #selector(widgetBack))
+            back.toolTip = L10n.t("widgets.window_back_hint")
+            let accessory = NSTitlebarAccessoryViewController()
+            back.frame = NSRect(x: 0, y: 0, width: 64, height: 24)
+            accessory.view = back; accessory.layoutAttribute = .right
+            window.addTitlebarAccessoryViewController(accessory)
+            setWidgetPresentation(desktop: !(session["widget_setup"] as? Bool ?? false))
+        }
         surface.control = { [weak transport] command in transport?.send(command) }
         gamepad.send = { [weak transport] command in transport?.send(command) }
         surface.baseDPI = session["dpi"] as? Int ?? 200
@@ -422,6 +466,17 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
                 SurfaceLog.write("\(self.package) Guest display ready: \(event["display"] ?? "unknown")")
                 if !self.receivedFrame { self.surface.showStatus(L10n.t("gfx.waiting")) }
             }
+            if self?.desktopWidgetID != nil {
+                if event["event"] as? String == "widget-state" {
+                    let ready = event["configured"] as? Bool == true && event["active"] as? Bool == true
+                        && event["configuring"] as? Bool != true
+                    self?.setWidgetPresentation(desktop: ready)
+                } else if event["event"] as? String == "widget-ready" {
+                    self?.setWidgetPresentation(desktop: true)
+                } else if event["event"] as? String == "widget-removed" {
+                    self?.close()
+                }
+            }
             if event["event"] as? String == "error" || event["event"] as? String == "input-warning" {
                 let message = event["message"] as? String ?? L10n.t("gfx.bridge_error")
                 if event["event"] as? String == "error" { self?.showFailure(message) }
@@ -438,6 +493,47 @@ final class SurfaceWindowController: NSWindowController, NSWindowDelegate {
         armFirstFrameTimeout()
         transport.start(hello)
     }
+    @objc private func widgetBack() { returnToWidget() }
+    func returnToWidget() {
+        transport.send(["type": "key", "code": 4, "action": 0])
+        transport.send(["type": "key", "code": 4, "action": 1])
+    }
+    private func setWidgetPresentation(desktop: Bool) {
+        guard desktopWidgetID != nil, let window else { return }
+        let changed = widgetOnDesktop != desktop
+        if desktop && window.level != .normal && !changed { return }
+        if !desktop && window.level == .normal && !changed {
+            if window.contentLayoutRect.width < 480 || window.contentLayoutRect.height < 480 {
+                changingWidgetFrame = true
+                window.setContentSize(NSSize(width: max(480, window.contentLayoutRect.width),
+                                             height: max(600, window.contentLayoutRect.height)))
+                changingWidgetFrame = false
+            }
+            return
+        }
+        if !desktop && widgetOnDesktop { desktopFrame = window.frame }
+        widgetOnDesktop = desktop
+        changingWidgetFrame = true
+        if desktop {
+            if let frame = desktopFrame { window.setFrame(frame, display: true) }
+            window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
+            window.orderBack(nil)
+        } else {
+            window.level = .normal
+            window.setContentSize(NSSize(width: max(480, window.contentLayoutRect.width),
+                                         height: max(600, window.contentLayoutRect.height)))
+            window.makeKeyAndOrderFront(nil)
+        }
+        changingWidgetFrame = false
+        surface.requestGuestResize()
+    }
+    private func saveWidgetFrame() {
+        guard let id = desktopWidgetID, widgetOnDesktop, !changingWidgetFrame, let window else { return }
+        desktopFrame = window.frame
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: "desktopWidgetFrame.\(id)")
+    }
+    func windowDidMove(_ notification: Notification) { saveWidgetFrame() }
+    func windowDidResize(_ notification: Notification) { saveWidgetFrame() }
     private func armFirstFrameTimeout() {
         firstFrameTimeout?.cancel()
         let timeout = DispatchWorkItem { [weak self] in

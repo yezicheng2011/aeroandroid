@@ -13,7 +13,7 @@ struct SurfaceFrame {
         guard payload.count >= 20 else { throw GraphicsProtocolFailure(message: L10n.t("gfx.header_short")) }
         let width = Int(payload.u32(at: 0)), height = Int(payload.u32(at: 4))
         let stride = Int(payload.u32(at: 8))
-        guard (320...2560).contains(width), (320...2560).contains(height), stride == width * 4,
+        guard (64...2560).contains(width), (64...2560).contains(height), stride == width * 4,
               payload.count == 20 + stride * height else { throw GraphicsProtocolFailure(message: L10n.t("gfx.frame_size")) }
         return SurfaceFrame(width: width, height: height, rowBytes: stride,
                             timestamp: payload.u64(at: 12), pixels: payload.subdata(in: 20..<payload.count))

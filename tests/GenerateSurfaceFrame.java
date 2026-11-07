@@ -10,6 +10,15 @@ public final class GenerateSurfaceFrame {
         try (DataOutputStream output = new DataOutputStream(new FileOutputStream(args[0]))) {
             SurfaceWire.writeFrame(output, 320, 480, 1234567891234L, pixels);
         }
+        if (args.length > 1) {
+            try (DataOutputStream output = new DataOutputStream(new FileOutputStream(args[1]))) {
+                SurfaceWire.writeFrame(output, 64, 96, 7L, new byte[64 * 96 * 4]);
+            }
+        }
+        try {
+            SurfaceWire.writeFrame(new DataOutputStream(new java.io.ByteArrayOutputStream()), 63, 96, 0L, new byte[63 * 96 * 4]);
+            throw new AssertionError("A frame below the widget minimum was accepted");
+        } catch (IllegalArgumentException expected) { }
         try {
             SurfaceWire.writeFrame(new DataOutputStream(System.out), 1, 1, 0L, new byte[4]);
             throw new AssertionError("Invalid dimensions accepted");
