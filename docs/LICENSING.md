@@ -11,6 +11,9 @@ microG signature modules and third-party app archives. The existing full edition
 On reinstall, AOSP disables an existing Magisk ramdisk override but preserves installed APKs and userdata.
 Existing GPL apps are not silently removed; users must uninstall them if they no longer want them.
 
+Live shared storage and the SIP phone/messaging client are original code using Python, Java and Android platform APIs;
+no FUSE driver, third-party SIP stack or codec library is added. Their project code remains Apache-2.0.
+
 This policy does not make the external runtime GPL-free: Android includes the GPL Linux kernel,
 the emulator has separately licensed components, and the build uses Temurin OpenJDK under GPL-2.0
 with the Classpath Exception. Those upstream licenses and notices still apply.

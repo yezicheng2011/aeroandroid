@@ -21,7 +21,11 @@ and opens in its own window with nothing else on screen.</p>
    Opening it shows only that app's window. No manager window, no emulator window.
 3. **Automatic memory budgeting.** New installs choose a memory budget for each Android start using your Mac's
    memory and available headroom. Set a minimum and maximum, or choose a manual budget in Settings.
-4. **Your Mac's camera works.** Android camera apps use the Mac's physical camera.
+4. **Shared Mac folders.** Choose a folder once and open or save its files directly from Android's system file picker.
+   Android and Finder use the same files, with read-only or read/write access.
+5. **SIP phone and messages.** Use your own SIP account for voice and text, with no cellular-modem fallback.
+   Carrier SMS requires a gateway from your provider.
+6. **Your Mac's camera works.** Android camera apps use the Mac's physical camera.
 
 Under the hood it is the official Android Emulator running the AOSP Android image for your Mac's chip, with a native Metal
 window per app, plus an Android-side bridge for input, clipboard and notifications.
@@ -175,6 +179,30 @@ Add more with `python3 scripts/preinstall-apps.py --pin <https APK url>` and pas
 
 microG is an open-source compatibility layer, not Google Play services: a successful install does not guarantee
 that every Google API, Play Integrity or banking app works. See [docs/MICROG.md](docs/MICROG.md).
+
+## Phone and messages over SIP
+
+The bridge includes **SIP Phone**, **SIP Messages** and local account settings. Open **Mac Bridge → SIP account**,
+enter your provider's details, and connect. The client uses TCP or verified TLS signaling and G.711 RTP audio;
+account passwords are encrypted with Android Keystore. The bridge install selects the SIP client for the Android
+Phone and SMS roles where available; Phone and Messages also include default-app selection buttons.
+
+Messages use **SIP MESSAGE**. A provider SMS gateway is needed to reach ordinary mobile numbers; voice service
+alone does not imply SMS support. No third-party SIP dependency is added. Current scope is one call, text messages
+and a compatible provider: no MMS, video, ICE, SRTP or emergency calling. TLS protects signaling, not RTP media.
+Real provider and Mac audio acceptance is still required. See [docs/SIP.md](docs/SIP.md) for setup and limits.
+
+## Shared storage
+
+Open **Files → Shared Mac folders**, add the folders you want to use, then choose **Connect to Android**.
+In an Android app's Open or Save dialog, choose **Mac · <folder name>**. Reads, edits and new files go directly
+to that Mac folder, without manual import/export or a synchronized copy. Finder opens the same files.
+Sharing restores automatically when Android starts. Each folder can be read-only or read/write; **Stop sharing**
+revokes access and leaves the files intact.
+
+Apps must support Android's system document picker. This does not mount Android's private app data in Finder or
+make Mac folders appear at raw `/sdcard` paths. Refresh/reopen the Android picker to see external Finder changes.
+The existing import/export folder remains available for older apps. See [docs/STORAGE.md](docs/STORAGE.md).
 
 ## Memory management
 

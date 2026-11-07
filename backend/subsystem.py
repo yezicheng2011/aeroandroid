@@ -455,7 +455,7 @@ class Controller:
             settings.update({"hw.keyboard": "yes", "hw.gpu.enabled": "yes", "hw.gpu.mode": "auto",
                              "hw.ramSize": str(self.config["memory_mb"]), "hw.cpu.ncore": str(self.config["cores"]),
                              "disk.dataPartition.size": "8G", "hw.lcd.width": "1280", "hw.lcd.height": "960",
-                             "hw.lcd.density": "200", "hw.audioInput": "no", "hw.audioOutput": "yes"})
+                             "hw.lcd.density": "200", "hw.audioInput": "yes", "hw.audioOutput": "yes"})
             config_file.write_text("\n".join(f"{k}={v}" for k, v in settings.items()) + "\n")
             return {"avd": self.avd, "created": True}
 
@@ -508,7 +508,8 @@ class Controller:
             shutil.rmtree(snapshots)
         config_file = avd / "config.ini"
         lines = config_file.read_text().splitlines()
-        updates = {"hw.ramSize": str(memory_mb), "hw.cpu.ncore": str(self.config["cores"])}
+        updates = {"hw.ramSize": str(memory_mb), "hw.cpu.ncore": str(self.config["cores"]),
+                   "hw.audioInput": "yes", "hw.audioOutput": "yes"}
         lines = [line for line in lines if line.split("=", 1)[0].strip() not in updates]
         lines.extend(f"{key}={value}" for key, value in updates.items())
         config_file.write_text("\n".join(lines) + "\n")
@@ -606,6 +607,8 @@ class Controller:
             self.adb("shell", "settings", "put", "global", "enable_freeform_support", "1")
             self.adb("shell", "settings", "put", "global", "stay_on_while_plugged_in", "3")
             self.adb("shell", "mkdir", "-p", "/sdcard/Download/MacBridge")
+            if self.storage_shares()["shares"]:
+                self.start_storage_locked()
             return {"state": "running", "android": self.config["android"], "serial": self.serial}
 
     def windows(self):
@@ -632,6 +635,7 @@ class Controller:
         with self.locked():
             # Validate device ownership before affecting any process.
             connected = self.device()
+            self.stop_storage_locked(connected)
             for record in self.windows().values():
                 self.terminate(record)
             atomic_json(self.root / "windows.json", {})
@@ -695,6 +699,7 @@ class Controller:
                 result = self.adb("install", "-r", str(apk), timeout=120)
                 if "Success" not in result.stdout:
                     raise SubsystemError("Guest bridge install failed: " + result.stdout)
+                self.communications_defaults_locked()
                 self.adb("shell", "mkdir", "-p", "/data/local/tmp/mac-surface")
                 self.adb("shell", "chmod", "700", "/data/local/tmp/mac-surface")
                 self.adb("push", str(apk), "/data/local/tmp/mac-surface/bridge.apk", timeout=120)
@@ -852,6 +857,146 @@ class Controller:
         out = self.adb("shell", "find", "/sdcard/Download/MacBridge", "-maxdepth", "1", "-type", "f").stdout
         return {"files": [s for s in out.splitlines() if s.startswith("/sdcard/Download/MacBridge/")]}
 
+    def storage_shares(self):
+        """Explicitly selected host directories; listing never starts Android."""
+        saved = read_json(self.root / "storage-shares.json", {"shares": []})
+        shares = saved.get("shares") if isinstance(saved, dict) else None
+        if not isinstance(shares, list):
+            raise SubsystemError("Invalid shared folder configuration")
+        for share in shares:
+            if (not isinstance(share, dict) or not re.fullmatch(r"[a-f0-9]{32}", str(share.get("id", "")))
+                    or not isinstance(share.get("path"), str) or not Path(share["path"]).is_absolute()
+                    or not isinstance(share.get("name"), str) or type(share.get("read_only")) is not bool):
+                raise SubsystemError("Invalid shared folder configuration")
+        record = read_json(self.root / "storage-service.json", {})
+        return {"shares": shares, "running": bool(record) and self.process_matches(record)}
+
+    def communications_defaults_locked(self):
+        """Route Android dial/send intents to our SIP client, without cellular fallback."""
+        roles = {}
+        for key, role in (("phone", "android.app.role.DIALER"), ("messages", "android.app.role.SMS")):
+            attempt = self.adb("shell", "cmd", "role", "add-role-holder", "--user", "0", role, COMPANION,
+                               check=False)
+            holders = self.adb("shell", "cmd", "role", "get-role-holders", "--user", "0", role, check=False)
+            roles[key] = {"selected": COMPANION in holders.stdout.splitlines(),
+                          "detail": "" if attempt.returncode == 0 else "Use the default-app button in SIP settings"}
+        atomic_json(self.root / "communications.json", roles)
+        return roles
+
+    def configure_communications(self):
+        self.ready()
+        with self.locked():
+            return self.communications_defaults_locked()
+
+    def share_folder(self, path, read_only=False):
+        if not isinstance(path, str) or not Path(path).is_absolute() or type(read_only) is not bool:
+            raise SubsystemError("Choose an absolute folder path and a read-only setting")
+        folder = Path(path).resolve(strict=True)
+        if not folder.is_dir():
+            raise SubsystemError("Only folders can be shared")
+        with self.locked():
+            shares = self.storage_shares()["shares"]
+            existing = next((share for share in shares if share["path"] == str(folder)), None)
+            if existing:
+                existing["read_only"] = read_only
+            else:
+                shares.append({"id": uuid.uuid4().hex, "name": folder.name or str(folder),
+                               "path": str(folder), "read_only": read_only})
+            atomic_json(self.root / "storage-shares.json", {"shares": shares})
+            if self.device():
+                self.start_storage_locked()
+            return self.storage_shares()
+
+    def unshare_folder(self, share_id):
+        if not isinstance(share_id, str) or not re.fullmatch(r"[a-f0-9]{32}", share_id):
+            raise SubsystemError("Invalid shared folder ID")
+        with self.locked():
+            shares = self.storage_shares()["shares"]
+            atomic_json(self.root / "storage-shares.json", {"shares": [s for s in shares if s["id"] != share_id]})
+            connected = self.device()
+            if self.storage_shares()["shares"]:
+                if connected:
+                    self.start_storage_locked()  # refresh Android's roots without restarting its apps
+            else:
+                self.stop_storage_locked(connected)
+            return self.storage_shares()
+
+    def storage_apk(self):
+        base = Path(__file__).resolve().parents[1]
+        apk = next((p for p in (base / "MacBridge.apk", base / "artifacts/MacBridge.apk") if p.is_file()), None)
+        if apk is None:
+            raise SubsystemError("MacBridge.apk is missing; rebuild the guest bridge first")
+        return apk
+
+    def start_storage(self):
+        if not self.storage_shares()["shares"]:
+            raise SubsystemError("Choose a Mac folder to share first")
+        self.boot()  # boot also restores the tunnel for exported apps and subsequent starts
+        return self.storage_shares()
+
+    def start_storage_locked(self):
+        """Connect the SAF provider to live host files, while the controller lock is held."""
+        apk = self.storage_apk()
+        digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+        token_file = self.root / "storage-token"
+        if not token_file.exists():
+            with os.fdopen(os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+                f.write(uuid.uuid4().hex + uuid.uuid4().hex)
+        token = token_file.read_text().strip()
+        os.chmod(token_file, 0o600)
+        if not re.fullmatch(r"[a-f0-9]{64}", token):
+            raise SubsystemError("Invalid private storage token")
+        record = read_json(self.root / "storage-service.json", {})
+        emulator = read_json(self.root / "emulator.json", {})
+        identity = {key: emulator.get(key) for key in ("pid", "birth")}
+        if not (record and type(record.get("port")) is int and 1024 <= record["port"] <= 65535
+                and self.process_matches(record) and record.get("bridge_sha256") == digest
+                and record.get("emulator") == identity):
+            self.stop_storage_locked(False)
+            result = self.adb("install", "-r", str(apk), timeout=120)
+            if "Success" not in result.stdout:
+                raise SubsystemError("Storage bridge install failed: " + result.stdout)
+            self.communications_defaults_locked()
+            service = Path(__file__).with_name("storage_service.py")
+            if not service.is_file():
+                raise SubsystemError("Storage service is missing; rebuild the Mac app")
+            port_file = self.root / "storage-port.json"
+            port_file.unlink(missing_ok=True)
+            arguments = [sys.executable, str(service), "--root", str(self.root)]
+            if type(emulator.get("pid")) is int and emulator.get("birth"):
+                arguments.append("--watch-emulator")
+            record = self.spawn(arguments, "storage-service.log")
+            record.update({"bridge_sha256": digest, "emulator": identity})
+            atomic_json(self.root / "storage-service.json", record)
+            deadline = time.monotonic() + 10
+            while not port_file.exists() and time.monotonic() < deadline:
+                if not self.process_matches(record):
+                    raise SubsystemError("Storage service stopped: " + self.log_tail("storage-service.log"))
+                time.sleep(0.1)
+            port = read_json(port_file, {}).get("port")
+            if type(port) is not int or not 1024 <= port <= 65535:
+                self.stop_storage_locked(False)
+                raise SubsystemError("Storage service did not publish a local port")
+            record["port"] = port
+            atomic_json(self.root / "storage-service.json", record)
+        # Reapply after ADB restarts or snapshot restores, even when the host service was reused.
+        self.adb("reverse", "tcp:7901", f"tcp:{record['port']}")
+        configured = self.adb("shell", "content", "call", "--uri", f"content://{AUTHORITY}",
+                              "--method", "storage-config", "--arg", token)
+        if "configured=true" not in configured.stdout:
+            self.stop_storage_locked(True)
+            raise SubsystemError("Android storage provider did not accept the connection; rebuild the guest bridge")
+
+    def stop_storage_locked(self, connected):
+        record = read_json(self.root / "storage-service.json", {})
+        self.terminate(record)
+        if connected and record:
+            self.adb("reverse", "--remove", "tcp:7901", check=False)
+            self.adb("shell", "content", "call", "--uri", f"content://{AUTHORITY}",
+                     "--method", "storage-config", "--arg", "", check=False)
+        (self.root / "storage-service.json").unlink(missing_ok=True)
+        (self.root / "storage-port.json").unlink(missing_ok=True)
+
     def pull(self, remote, destination):
         self.ready()
         shared_path(remote)
@@ -948,6 +1093,7 @@ class Controller:
                 "NSHumanReadableCopyright": manager.get("NSHumanReadableCopyright", ""),
                 "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
                 "NSCameraUsageDescription": "This Android app can use the Mac camera.",
+                "NSMicrophoneUsageDescription": "This Android app can use the Mac microphone for SIP calls.",
                 "AndroidPackage": package, "SubsystemAppPath": str(app)}
         with (contents / "Info.plist").open("wb") as f:
             plistlib.dump(info, f)
@@ -1007,6 +1153,11 @@ def dispatch(controller, action, params):
              "close": lambda: controller.close(params["package"]), "install": lambda: controller.install(params["files"]),
              "uninstall": lambda: controller.uninstall(params["package"]), "push": lambda: controller.push(params["files"]),
              "files": lambda: controller.files(), "pull": lambda: controller.pull(params["remote"], params["destination"]),
+             "storage-shares": lambda: controller.storage_shares(),
+             "share-folder": lambda: controller.share_folder(params["path"], params.get("read_only", False)),
+             "unshare-folder": lambda: controller.unshare_folder(params["id"]),
+             "start-storage": lambda: controller.start_storage(),
+             "configure-communications": lambda: controller.configure_communications(),
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
              "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
              "prime": lambda: controller.prime(),

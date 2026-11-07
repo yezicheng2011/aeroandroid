@@ -34,3 +34,22 @@ In Terminal, go to the project directory and run:
 The report is saved to AndroidSubsystem-Diagnostics.json on the Desktop and is not uploaded automatically. It includes runtime checks, app process information and limited logs, and may contain local paths and app names; it does not include the surface-token.
 
 If the install step fails, keep the Terminal output of Install.command. If a graphics window is black, first check surface-bridge.log for VirtualDisplay / InputManager / permission errors.
+
+## Live shared folders
+
+- Add a Mac folder and connect it to Android. Open a file from **Mac · <folder>** in an Android editor,
+  save a change, and verify Finder sees the same bytes. Test seeking in a file larger than the bridge chunk size.
+- Create, rename and delete a file; create a nested folder with Unicode names and test a directory with more than 256 entries.
+- Share a folder read-only and confirm Android cannot alter it. Revoke an open root and confirm subsequent reads/writes fail.
+- Replace an open file in Finder; confirm Android cannot overwrite the replacement through its old descriptor.
+- Stop and restart Android, including Quick Boot, and verify the same roots reconnect without duplicate files.
+- Confirm a folder with blocked macOS privacy permissions reports an error, and no symlink escapes the selected root.
+
+## SIP phone and messages
+
+- Configure a test account locally; check TLS hostname validation and registration. No secrets belong in an issue or PR.
+- Select the Phone and SMS roles, then open Android `tel:` and `smsto:` intents and confirm SIP activities handle them.
+- Check incoming and outgoing calls, two-way microphone/speaker audio, mute, answer/reject and hangup.
+- Check Unicode SIP MESSAGE send/receive and provider rejection; distinguish acceptance from a carrier delivery receipt.
+- Disconnect/reconnect and stop/restart Android. Verify account credentials survive an in-place bridge upgrade.
+- Confirm SIP Phone and SIP Messages never silently use the emulator's cellular modem. Test provider NAT compatibility separately.

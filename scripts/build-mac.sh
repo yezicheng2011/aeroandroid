@@ -18,6 +18,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/backend"
 cp "$bin_path/AndroidSubsystem" "$app/Contents/MacOS/AndroidSubsystem"
 strip -x "$app/Contents/MacOS/AndroidSubsystem"   # smaller download; the app has no use for local symbols
 cp "$project_root/backend/subsystem.py" "$app/Contents/Resources/backend/"
+cp "$project_root/backend/storage_service.py" "$app/Contents/Resources/backend/"
 cp "$project_root/artifacts/MacBridge.apk" "$app/Contents/Resources/"
 cp "$project_root/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 render > "$app/Contents/Info.plist" <<'PLIST'
@@ -36,6 +37,7 @@ render > "$app/Contents/Info.plist" <<'PLIST'
 <key>NSHumanReadableCopyright</key><string>@COPYRIGHT@</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSCameraUsageDescription</key><string>Android apps in the subsystem use the Mac camera when you open a camera app.</string>
+<key>NSMicrophoneUsageDescription</key><string>SIP calls in Android use the Mac microphone.</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>Android app launcher</string>
 <key>CFBundleURLSchemes</key><array><string>android-subsystem</string></array></dict></array>
@@ -68,6 +70,7 @@ render > "$helper/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSCameraUsageDescription</key><string>Android apps in the subsystem use the Mac camera when you open a camera app.</string>
+<key>NSMicrophoneUsageDescription</key><string>SIP calls in Android use the Mac microphone.</string>
 <key>AndroidMode</key><string>install</string>
 <key>UTImportedTypeDeclarations</key><array><dict>
 <key>UTTypeIdentifier</key><string>com.android.package-archive</string>

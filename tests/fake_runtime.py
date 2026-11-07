@@ -62,6 +62,10 @@ elif name == 'adb':
         elif command[:2] == ['getprop', 'sys.boot_completed']: print('1')
         elif command[:2] == ['getprop', 'ro.build.version.sdk']: print(state['api'])
         elif command[:2] == ['getprop', 'ro.product.cpu.abilist']: print('x86_64,x86')
+        elif command[:3] == ['cmd', 'role', 'get-role-holders']:
+            print('dev.dan.androidsubsystem')
+        elif command[:2] == ['content', 'call'] and '--method' in command and command[command.index('--method') + 1] == 'storage-config':
+            print('Result: Bundle[{configured=' + ('true' if command[command.index('--arg') + 1] else 'false') + '}]')
         elif command[:2] == ['content', 'query']:
             endpoint = command[-1].rsplit('/', 1)[-1]
             if endpoint == 'apps': data = {'apps': [{'package': 'com.example.first', 'label': 'First'}, {'package': 'com.example.second', 'label': 'Second'}]}

@@ -74,6 +74,17 @@ public final class BridgeProvider extends ContentProvider {
     @Override public String getType(Uri uri) { return "application/json"; }
     @Override public android.os.Bundle call(String method, String arg, android.os.Bundle extras) {
         getContext().enforceCallingOrSelfPermission("android.permission.DUMP", "ADB shell only");
+        if ("storage-config".equals(method)) {
+            if (arg == null || (!arg.isEmpty() && !arg.matches("[0-9a-f]{64}"))) {
+                throw new IllegalArgumentException("Invalid storage credential");
+            }
+            getContext().getSharedPreferences("bridge", 0).edit().putString("storage_token", arg).commit();
+            MacDocumentsProvider.notifyRoots(getContext());
+            android.os.Bundle result = new android.os.Bundle();
+            result.putBoolean("accepted", true);
+            result.putBoolean("configured", !arg.isEmpty());
+            return result;
+        }
         if (!"commit".equals(method)) throw new UnsupportedOperationException();
         String text = extras == null ? "" : extras.getString("text", "");
         if (text.length() > 8192) throw new IllegalArgumentException("Text too long");

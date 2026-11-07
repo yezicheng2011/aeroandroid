@@ -7,6 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: bash -n and shellcheck
@@ -31,3 +35,42 @@ jobs:
           swift --version
       - name: Swift build
         run: swift build --package-path macos
+  guest-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Fetch pinned Android API and build tools
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, urllib.request, zipfile
+          entry = next(a for a in json.load(open('scripts/runtime-lock.json'))['archives']
+                       if a.get('package') == 'platforms;android-36')
+          sdk = pathlib.Path('work/ci-sdk')
+          urllib.request.urlretrieve(entry['url'], 'platform.zip')
+          assert hashlib.sha256(pathlib.Path('platform.zip').read_bytes()).hexdigest() == entry['sha256']
+          with zipfile.ZipFile('platform.zip') as archive:
+              jar = next(n for n in archive.namelist() if n.endswith('/android.jar'))
+              platform = sdk / 'platforms/android-36'
+              platform.mkdir(parents=True)
+              (platform / 'android.jar').write_bytes(archive.read(jar))
+          url = 'https://dl.google.com/android/repository/build-tools_r36_linux.zip'
+          urllib.request.urlretrieve(url, 'build-tools.zip')
+          expected = '5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b'
+          assert hashlib.sha256(pathlib.Path('build-tools.zip').read_bytes()).hexdigest() == expected
+          with zipfile.ZipFile('build-tools.zip') as archive:
+              archive.extractall(sdk / 'unpacked')
+          tools = sdk / 'build-tools/36.0.0'
+          tools.parent.mkdir()
+          (sdk / 'unpacked/android-16').rename(tools)
+          for name in ('aapt2', 'd8', 'zipalign', 'apksigner'):
+              (tools / name).chmod(0o755)
+          PY
+      - name: Build and verify signed guest APK
+        env:
+          ANDROID_SUBSYSTEM_SDK: ${{ github.workspace }}/work/ci-sdk
+          ANDROID_SUBSYSTEM_SIGNING_DIR: ${{ runner.temp }}/guest-signing
+        run: bash scripts/build-guest.sh
