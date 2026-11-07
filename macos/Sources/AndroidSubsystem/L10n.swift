@@ -1,179 +1,15 @@
 import Foundation
 
-enum UiLangPref: String, CaseIterable, Identifiable {
-    case en, zh
-    var id: String { rawValue }
-}
-
-enum ResolvedLang: String {
-    case zh, en
-}
-
-/// English and Chinese catalogs for the Mac app. English is the default whatever the system language is;
-/// Chinese is used only when it is chosen in Settings, and any string missing from it falls back to English.
+/// English-only user interface. Saved language choices from older versions are ignored.
 enum L10n {
-    static let defaultsKey = "uiLang"
-
-    static func preference() -> UiLangPref {
-        UiLangPref(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .en   // an old "system" choice also lands here
-    }
-
-    static func setPreference(_ value: UiLangPref) {
-        UserDefaults.standard.set(value.rawValue, forKey: defaultsKey)
-    }
-
-    static func resolved() -> ResolvedLang {
-        preference() == .zh ? .zh : .en
-    }
-
     /// Look up `key` and replace `{0}`, `{1}`, … with `args`.
     static func t(_ key: String, _ args: CVarArg...) -> String {
-        let pack = messages[resolved()] ?? messages[.en]!
-        var text = pack[key] ?? messages[.en]![key] ?? key
+        var text = en[key] ?? key
         for (index, arg) in args.enumerated() {
             text = text.replacingOccurrences(of: "{\(index)}", with: "\(arg)")
         }
         return text
     }
-
-    private static let messages: [ResolvedLang: [String: String]] = [
-        .zh: zh,
-        .en: en,
-    ]
-
-    private static let zh: [String: String] = [
-        "app.title": "安卓子系统",
-        "state.running": "正在运行",
-        "state.booting": "正在启动",
-        "state.stopped": "已停止",
-        "state.unavailable": "需要配置",
-        "err.queue_full": "待处理操作过多，请稍后再试。",
-        "err.drop_apk": "请拖入 APK；其他文件请在文件交换页面导入。",
-        "err.notify_denied": "请在 macOS 系统设置中允许安卓子系统发送通知。",
-        "err.bridge_install": "安卓已启动，但 Mac Bridge 安装失败：{0}",
-        "err.missing_controller": "找不到运行控制器，请重新构建应用。",
-        "err.missing_python": "请先安装 Python 3，或运行 setup-mac.sh。",
-        "err.controller_empty": "控制器没有返回有效结果。",
-        "err.operation_failed": "操作失败",
-        "prog.boot": "正在启动 Android {0}…",
-        "prog.stop": "正在关闭窗口并停止安卓系统…",
-        "prog.open": "正在打开 {0}…",
-        "prog.close": "正在关闭 {0}…",
-        "prog.install": "正在安装 APK…",
-        "prog.uninstall": "正在卸载…",
-        "prog.import": "正在导入文件…",
-        "prog.export": "正在导出文件…",
-        "prog.launcher": "正在创建启动入口…",
-        "app.starting": "正在打开 {0}…",
-        "err.backend.shutdown_unconfirmed": "安卓端口仍在使用，尚未确认旧子系统退出。请先停止子系统，再修改内存或重新启动。",
-        "err.backend.no_free_port": "找不到可用的安卓端口对（5554–5681）。请关闭不需要的模拟器后重试。",
-        "err.backend.runtime_upgrade_needed": "这台 Mac 上是较旧的 Android 安装，尚未安装 Android 17。请运行一次安装程序升级（打开 DMG，运行「Install aeroandroid」）。旧的应用和数据会保留为备份。",
-        "intel.title": "这台 Mac 使用 Intel 处理器",
-        "intel.body": "这里的安卓以 x86_64 运行。很多安卓应用，尤其是大多数 3D 游戏，只包含 arm64 代码，需要「ARM 翻译」才能运行。完整版安装会自动加入 ARM 翻译（比原生慢）；如果安装时选了 --pure 或 --no-arm-translation，这些应用会无法安装（提示「没有匹配的 CPU 架构」）。纯 Java/Kotlin 应用和带有 x86_64 代码的应用不受影响。设置 → 检查运行环境 可查看当前支持的 CPU 类型。",
-        "install.working": "正在安装应用…",
-        "install.choose": "选择要安装的 APK",
-        "install.failed": "无法完成安装",
-        "app.start_failed": "无法打开 {0}",
-        "prog.diagnose": "正在检查运行环境…",
-        "prog.save_config": "正在保存运行配置…",
-        "prog.refresh": "正在刷新…",
-        "panel.install_apk": "安装 APK（拆分 APK 请一起选择）",
-        "panel.import_files": "导入文件到安卓 Download/MacBridge",
-        "panel.export_dest": "选择保存位置",
-        "panel.save_launcher": "保存 Mac 启动入口",
-        "alert.uninstall_title": "卸载 {0}？",
-        "alert.uninstall_body": "安卓应用及其保存的数据将被删除。",
-        "alert.uninstall": "卸载",
-        "alert.cancel": "取消",
-        "alert.failed_title": "操作未完成",
-        "alert.ok": "好",
-        "alert.view_logs": "查看日志",
-        "notify.default_title": "安卓应用",
-        "card.window_running": "独立窗口正在运行",
-        "card.show": "显示",
-        "card.open": "打开",
-        "card.close_window": "关闭窗口",
-        "card.create_launcher": "创建 Mac 启动入口…",
-        "card.uninstall": "卸载…",
-        "lib.title": "安卓应用",
-        "lib.subtitle": "Android {0} · {1} 个独立窗口",
-        "lib.install_apk": "安装 APK…",
-        "lib.search": "搜索应用名称或包名",
-        "lib.not_running_title": "安卓子系统尚未启动",
-        "lib.not_running_body": "启动后，你可以同时打开多个安卓应用，每个应用拥有独立窗口。",
-        "lib.boot": "启动 Android {0}",
-        "lib.empty_title": "暂无应用",
-        "lib.empty_body": "安装 APK 或刷新应用列表。",
-        "files.title": "文件交换",
-        "files.hint": "交换目录：安卓 Download/MacBridge。应用可以通过安卓文件选择器访问。",
-        "files.import": "导入 Mac 文件…",
-        "files.refresh": "刷新",
-        "files.export": "导出…",
-        "nav.library": "应用库",
-        "nav.files": "文件交换",
-        "nav.settings": "系统设置",
-        "nav.stop": "停止子系统",
-        "nav.start": "启动子系统",
-        "nav.refresh": "刷新",
-        "menu.show_window": "显示管理窗口",
-        "menu.quit": "退出管理应用（安卓继续运行）",
-        "settings.runtime": "运行环境",
-        "settings.android_ver": "安卓版本",
-        "settings.android_hint": "aeroandroid 运行 Android 17（API 37）。",
-        "settings.memory": "内存",
-        "settings.cores": "CPU 核心：{0}",
-        "settings.fps": "帧率上限",
-        "settings.gpu": "图形加速",
-        "settings.gpu.auto": "自动（推荐）",
-        "settings.gpu.host": "强制使用 Mac GPU",
-        "settings.gpu_hint": "游戏的画面由 Mac 的 GPU 渲染。「自动」在 Apple 芯片上同样使用 GPU；强制模式在 GPU 不可用时会启动失败。60 帧受画面传输速度限制。",
-        "pad.title": "游戏手柄",
-        "pad.enable": "把 Mac 上连接的手柄传给安卓应用",
-        "pad.connected": "当前手柄：{0}",
-        "pad.none": "未连接",
-        "pad.unmapped": "不映射",
-        "pad.reset": "恢复默认按键",
-        "pad.hint": "摇杆、扳机和方向键固定对应安卓的轴；这里只改按键。只有当前窗口会收到手柄输入。",
-        "settings.save": "保存配置",
-        "settings.config_hint": "更改配置前需要停止子系统。",
-        "settings.notifications": "桌面通知",
-        "settings.forward_notify": "转发安卓通知到 Mac",
-        "settings.open_notify": "打开安卓通知授权设置…",
-        "settings.notify_hint": "需要在安卓设置中允许 Mac Bridge 读取通知，并允许本应用发送 macOS 通知。当前转发需要管理应用保持运行。",
-        "settings.diagnostics": "诊断",
-        "settings.check_env": "检查运行环境",
-        "settings.open_logs": "打开日志文件夹",
-        "settings.check_fallback": "检查",
-        "settings.language": "界面语言",
-        "settings.language_hint": "默认使用英文。你的选择会被记住。",
-        "settings.lang.zh": "中文",
-        "settings.lang.en": "English",
-        "gfx.connecting": "正在连接安卓应用…",
-        "gfx.closed": "安卓图形连接已关闭",
-        "gfx.bad_frame": "图形协议帧无效",
-        "gfx.bad_control": "图形控制消息无效",
-        "gfx.no_metal": "无法创建 Metal 设备",
-        "gfx.no_queue": "无法创建 Metal 命令队列",
-        "gfx.no_cache": "无法创建 Metal 纹理缓存（{0}）",
-        "gfx.no_pool": "无法创建 IOSurface 图形缓冲池",
-        "gfx.pool_missing": "IOSurface 缓冲池缺失",
-        "gfx.no_buffer": "无法分配 IOSurface 缓冲（{0}）",
-        "gfx.no_pixels": "无法访问图形像素（{0}）",
-        "gfx.null_pixels": "IOSurface 像素地址为空",
-        "gfx.bad_stride": "IOSurface 行宽无效",
-        "gfx.no_command": "无法创建 Metal 绘制命令",
-        "gfx.no_texture": "安卓像素已收到，但无法创建 Metal 纹理（{0}）",
-        "gfx.no_encoder": "无法创建 Metal 绘制编码器",
-        "gfx.draw_failed": "Metal 绘制失败",
-        "gfx.bad_port": "图形端口无效",
-        "gfx.drawing": "已收到安卓画面，正在绘制…",
-        "gfx.waiting": "安卓应用已启动，正在等待画面…",
-        "gfx.bridge_error": "安卓桥接错误",
-        "gfx.timeout_drawn": "已收到安卓帧，但 Mac 未完成绘制。请查看 surface-mac.log。",
-        "gfx.timeout_wait": "20 秒内未收到安卓画面。请查看 surface-bridge.log 和 surface-mac.log。",
-        "gfx.header_short": "图形帧头不完整",
-        "gfx.frame_size": "图形帧尺寸或长度无效",
-    ]
 
     private static let en: [String: String] = [
         "app.title": "Android Subsystem",
@@ -203,7 +39,7 @@ enum L10n {
         "err.backend.no_free_port": "No free Android port pair (5554-5681). Close emulators you do not need and try again.",
         "err.backend.runtime_upgrade_needed": "This Mac still has an older Android setup, and Android 17 is not installed yet. Run the installer once to upgrade (open the DMG and run \"Install aeroandroid\"). Your old apps and data are kept as a backup.",
         "intel.title": "This Mac has an Intel processor",
-        "intel.body": "Android runs here as x86_64. Many Android apps, especially most 3D games, ship only arm64 code and need ARM translation to run. The full install adds ARM translation automatically (it is slower than native); if you chose --pure or --no-arm-translation, those apps will not install (you will see \"no matching CPU types\"). Apps written in plain Java/Kotlin, and apps with x86_64 code, are not affected. Settings → Check runtime environment shows the CPU types this system supports.",
+        "intel.body": "Android runs here as x86_64. The default AOSP installation runs apps with x86/x86_64 code and apps written in plain Java/Kotlin. ARM-only apps need the optional full edition (./build.sh --with-gpl), which downloads GPL components and installs ARM translation; it is slower than native and still needs validation on an Intel Mac. Settings → Check environment shows the CPU types this system supports.",
         "install.working": "Installing app…",
         "install.choose": "Choose an APK to install",
         "install.failed": "The app could not be installed",
@@ -255,6 +91,16 @@ enum L10n {
         "settings.android_ver": "Android version",
         "settings.android_hint": "aeroandroid runs Android 17 (API 37).",
         "settings.memory": "Memory",
+        "settings.memory_mode": "Memory allocation",
+        "settings.memory_auto": "Automatic (recommended)",
+        "settings.memory_manual": "Manual",
+        "settings.memory_min": "Minimum memory",
+        "settings.memory_max": "Maximum memory",
+        "settings.memory_auto_hint": "Choose a memory budget at each startup using your Mac's physical and available memory, within these limits. Memory does not resize while Android is running.",
+        "settings.memory_manual_hint": "Use this fixed memory budget at each startup.",
+        "settings.memory_active": "Running Android budget: {0} MB",
+        "settings.memory_estimate": "Next startup estimate (saved settings): {0} MB",
+        "settings.memory_fallback": "Mac memory information is unavailable; using a conservative startup budget.",
         "settings.cores": "CPU cores: {0}",
         "settings.fps": "FPS cap",
         "settings.gpu": "Graphics acceleration",
@@ -278,10 +124,6 @@ enum L10n {
         "settings.check_env": "Check environment",
         "settings.open_logs": "Open logs folder",
         "settings.check_fallback": "Check",
-        "settings.language": "Language",
-        "settings.language_hint": "The app is in English by default. Your choice is remembered.",
-        "settings.lang.zh": "中文",
-        "settings.lang.en": "English",
         "gfx.connecting": "Connecting to Android app…",
         "gfx.closed": "Android graphics connection closed",
         "gfx.bad_frame": "Invalid graphics frame",

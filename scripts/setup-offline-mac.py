@@ -25,6 +25,17 @@ def arm_translation_wanted(lock, graphics_only):
     return lock.get('arch') == 'x86_64' and not graphics_only and os.environ.get('AEROANDROID_ARM_TRANSLATION', '1') != '0'
 
 
+def selected_archives(lock, graphics_only=True):
+    """Select the same archives for downloading, verification and extraction.
+
+    The default AOSP install must work with a fresh cache that has never
+    contained the optional GPL extensions or their provisioning dependencies.
+    """
+    return [entry for entry in lock['archives']
+            if not (graphics_only and entry.get('relative_path', '').startswith('provision/'))
+            and not (entry.get('kind') == 'arm_translation' and not arm_translation_wanted(lock, graphics_only))]
+
+
 def package_destination(sdk, package):
     """Where an SDK package lives: platforms;android-36 -> platforms/android-36, and so on."""
     fixed = {'cmdline-tools;latest': 'cmdline-tools/latest', 'platform-tools': 'platform-tools', 'emulator': 'emulator'}
@@ -188,13 +199,14 @@ def retire_old_images(root):
                   'Delete them to free disk space once you no longer need them.')
 
 
-def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=False):
+def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=True):
     sdk = root / 'sdk'
     runtime = root / 'runtime'
     root.mkdir(parents=True, exist_ok=True)
     # Every path and digest is fixed in the shipped lockfile, not inferred from filenames.
-    for entry in lock['archives']:
-        if entry.get('kind') == 'arm_translation' and not arm_translation_wanted(lock, graphics_only): continue
+    archives = selected_archives(lock, graphics_only)
+    selected_lock = {**lock, 'archives': archives}
+    for entry in archives:
         archive = cache / entry['relative_path']
         if not archive.is_file(): raise RuntimeError(f'Missing runtime archive: {archive}')
         print('Checking:', archive.name, flush=True)
@@ -214,7 +226,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
             raise RuntimeError('SDK license was not accepted; installation cancelled')
     (sdk / 'licenses').mkdir(parents=True, exist_ok=True)
     if not previously_accepted: accepted.write_text(license_digest + '\n')
-    destinations = {e['package']: package_destination(sdk, e['package']) for e in lock['archives'] if e.get('package')}
+    destinations = {e['package']: package_destination(sdk, e['package']) for e in archives if e.get('package')}
     marker = root / 'installed-runtime.json'
     fingerprint = runtime_fingerprint(lock)
     already = runtime_installed(root, lock)
@@ -225,7 +237,7 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         status = json.loads(check.stdout)
         if status.get('data', {}).get('state') in ['running', 'booting'] or status.get('data', {}).get('runtime_process_active'):
             raise RuntimeError('Stop the existing Android subsystem before installing runtime dependencies')
-        for entry in lock['archives']:
+        for entry in archives:
             archive = cache / entry['relative_path']
             print('Installing:', archive.name, flush=True)
             if entry.get('package'):
@@ -241,14 +253,16 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         link.unlink(missing_ok=True); link.symlink_to(scrcpy)
     # Repair the installation record even when the previous binary-install marker
     # matches. Existing users keep their SDK files, AVDs, applications and userdata.
-    licenses = register_sdk_packages(package_records(cache, lock), destinations)
+    licenses = register_sdk_packages(package_records(cache, selected_lock), destinations)
     accept_sdk_licenses(licenses, sdk, root, accept_licenses)
     marker.write_text(json.dumps({'fingerprint': fingerprint}, indent=2))
     java_home = next((runtime / 'java').glob('*/Contents/Home'))
     config_path = root / 'config.json'
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
-    if config.get('image_tag') != 'default' or config.get('android') != lock['android']:
-        config.pop('magisk_ramdisk', None)   # it was patched from the image of an older runtime
+    if graphics_only or config.get('image_tag') != 'default' or config.get('android') != lock['android']:
+        # AOSP-only installs must not keep booting an earlier rooted ramdisk.
+        # An override patched for a different system image is stale as well.
+        config.pop('magisk_ramdisk', None)
     config.update({'android': lock['android'], 'image_tag': 'default', 'sdk': str(sdk), 'java_home': str(java_home)})
     pending = config_path.with_name('config.json.pending')   # replace in one step: a crash must not leave a torn file
     pending.write_text(json.dumps(config, indent=2))
@@ -294,7 +308,11 @@ def main():
     parser.add_argument('cache', type=Path)
     parser.add_argument('--root', type=Path, default=Path.home() / 'Library/Application Support/AndroidSubsystem')
     parser.add_argument('--accept-sdk-license', action='store_true')
-    parser.add_argument('--graphics-only', action='store_true', help='Install for graphics acceptance before Magisk root provisioning')
+    edition = parser.add_mutually_exclusive_group()
+    edition.add_argument('--graphics-only', action='store_true', default=True,
+                         help='Install AOSP without optional GPL extensions (default)')
+    edition.add_argument('--with-gpl', dest='graphics_only', action='store_false',
+                         help='Opt into Magisk, microG and pre-installed apps, including GPL extensions')
     args = parser.parse_args()
     if platform.system() != 'Darwin': raise RuntimeError('Requires a Mac')
     lock = json.loads(Path(os.environ.get('ANDROID_SUBSYSTEM_LOCK') or PROJECT / 'scripts/runtime-lock.json').read_text())

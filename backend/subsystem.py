@@ -25,7 +25,8 @@ import uuid
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\Z")
 COMPANION = "dev.dan.androidsubsystem"
 AUTHORITY = COMPANION + ".bridge"
-DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "cores": 4,
+DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "memory_mode": "auto",
+            "memory_min_mb": 2048, "memory_max_mb": 8192, "cores": 4,
             "resolution": "1280x960/200", "fps": 30, "bitrate": "12M", "gpu": "auto"}
 RETIRED_ANDROID = (16,)   # no longer offered; a saved config that still names one is upgraded by migrate_legacy()
 
@@ -47,6 +48,33 @@ def host_arch():
     except (OSError, subprocess.SubprocessError):
         out = ""
     return "arm64" if out.strip() == "1" else "x86_64"
+
+
+def host_memory():
+    """Physical and reclaimable host RAM in MiB, or None if macOS metrics are unavailable.
+
+    vm_stat's purgeable pages overlap other page counts, so they are not added.
+    This is a conservative boot-time estimate, not a live VM balloon interface.
+    """
+    if platform.system() != "Darwin":
+        return None
+    try:
+        total = subprocess.run(["/usr/sbin/sysctl", "-n", "hw.memsize"],
+                               capture_output=True, text=True, timeout=5, check=True).stdout
+        stats = subprocess.run(["/usr/bin/vm_stat"], capture_output=True, text=True,
+                               timeout=5, check=True).stdout
+        page = re.search(r"page size of ([0-9]+) bytes", stats)
+        counts = [re.search(r"^Pages " + name + r":\s+([0-9]+)\.", stats, re.MULTILINE)
+                  for name in ("free", "inactive", "speculative")]
+        if not page or not all(counts):
+            return None
+        total_mb = int(total.strip()) // (1024 * 1024)
+        available_mb = sum(int(count[1]) for count in counts) * int(page[1]) // (1024 * 1024)
+        if total_mb <= 0 or int(page[1]) not in (4096, 16384):
+            return None
+        return {"total_mb": total_mb, "available_mb": min(total_mb, available_mb)}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def env_int(name, default):
@@ -159,9 +187,16 @@ class Controller:
             raise SubsystemError("Unknown Android system image type")
         if type(c.get("port")) is not int or c["port"] % 2 or not 5554 <= c["port"] <= 5680:
             raise SubsystemError("Emulator port must be even, between 5554 and 5680")
-        for k, low, high in [("memory_mb", 2048, 16384), ("cores", 2, 12), ("fps", 15, 120)]:
+        for k, low, high in [("memory_mb", 2048, 16384), ("memory_min_mb", 2048, 16384),
+                             ("memory_max_mb", 2048, 16384), ("cores", 2, 12), ("fps", 15, 120)]:
             if type(c.get(k)) is not int or not low <= c[k] <= high:
                 raise SubsystemError(f"Invalid {k}: expected {low}..{high}")
+        if c.get("memory_mode") not in ("auto", "manual"):
+            raise SubsystemError("Memory mode must be auto or manual")
+        if c["memory_min_mb"] > c["memory_max_mb"]:
+            raise SubsystemError("Minimum memory cannot exceed maximum memory")
+        if c["memory_min_mb"] % 256 or c["memory_max_mb"] % 256:
+            raise SubsystemError("Automatic memory limits must be multiples of 256 MiB")
         if not re.fullmatch(r"[0-9]{3,4}x[0-9]{3,4}/[0-9]{2,3}", str(c.get("resolution"))):
             raise SubsystemError("Resolution must be WIDTHxHEIGHT/DPI")
         w, h, dpi = map(int, re.split(r"[x/]", c["resolution"]))
@@ -209,6 +244,9 @@ class Controller:
         if not isinstance(saved, dict):
             raise SubsystemError(f"Cannot read {self.root / 'config.json'}: expected a JSON object")
         config = {**DEFAULTS, **saved}
+        # A previous explicit RAM choice is preserved until the user selects Automatic.
+        if "memory_mb" in saved and "memory_mode" not in saved:
+            config["memory_mode"] = "manual"
         # Existing installations must remain identifiable so they can be stopped
         # safely before migration. New installations always select AOSP.
         if "image_tag" not in saved and saved and (self.root / "avd" / f"MacAndroid_{config['android']}_arm64.ini").exists():
@@ -385,6 +423,9 @@ class Controller:
             if self.outdated:
                 self.migrate_legacy()
             candidate = {**self.config, **changes}
+            # Existing CLI clients setting a size still request that exact size.
+            if "memory_mb" in changes and "memory_mode" not in changes:
+                candidate["memory_mode"] = "manual"
             if candidate["android"] != DEFAULTS["android"] or candidate["image_tag"] != "default":
                 raise SubsystemError(f"Only Android {DEFAULTS['android']} (AOSP image) is supported")
             self.validate_config(candidate)
@@ -417,6 +458,61 @@ class Controller:
                              "hw.lcd.density": "200", "hw.audioInput": "no", "hw.audioOutput": "yes"})
             config_file.write_text("\n".join(f"{k}={v}" for k, v in settings.items()) + "\n")
             return {"avd": self.avd, "created": True}
+
+    def memory_budget(self):
+        """Choose a guest RAM ceiling for the next boot, retaining memory for the Mac.
+
+        Automatic mode targets at most half physical RAM and leaves at least 2 GiB
+        (or a quarter of physical RAM) of currently reclaimable memory for macOS.
+        The configured floor wins under pressure; missing metrics use that floor.
+        Allocations are rounded down to 256 MiB and bounded by the chosen limits.
+        """
+        mode = self.config["memory_mode"]
+        minimum, maximum = self.config["memory_min_mb"], self.config["memory_max_mb"]
+        host = host_memory() if mode == "auto" else None
+        if mode == "manual":
+            selected, source = self.config["memory_mb"], "manual"
+        elif host is None:
+            selected, source = minimum, "fallback"
+        else:
+            reserve = max(2048, host["total_mb"] // 4)
+            budget = min(host["total_mb"] // 2, host["available_mb"] - reserve)
+            selected = max(minimum, min(maximum, budget // 256 * 256))
+            source = "host"
+        return {"mode": mode, "selected_mb": selected, "source": source,
+                "min_mb": minimum, "max_mb": maximum,
+                "host_total_mb": host["total_mb"] if host else None,
+                "host_available_mb": host["available_mb"] if host else None}
+
+    def memory_status(self, running=None):
+        budget = self.memory_budget()
+        if running is None:
+            running = self.running_emulator()
+        record = read_json(self.root / "emulator.json", {}) if running else {}
+        allocated = record.get("memory_mb")
+        budget["active_mb"] = allocated if type(allocated) is int else None
+        return budget
+
+    def prepare_memory(self, memory_mb):
+        """Update a stopped AVD and discard only incompatible Quick Boot snapshots.
+
+        Older builds did not record the RAM used by snapshots; discard those once
+        rather than restoring a snapshot with an unknown hardware allocation.
+        Guest userdata and installed apps are never removed.
+        """
+        avd = self.avd_home / f"{self.avd}.avd"
+        marker = avd / "aeroandroid-memory.json"
+        previous = read_json(marker, {})
+        snapshots = avd / "snapshots"
+        if previous.get("memory_mb") != memory_mb and snapshots.exists():
+            shutil.rmtree(snapshots)
+        config_file = avd / "config.ini"
+        lines = config_file.read_text().splitlines()
+        updates = {"hw.ramSize": str(memory_mb), "hw.cpu.ncore": str(self.config["cores"])}
+        lines = [line for line in lines if line.split("=", 1)[0].strip() not in updates]
+        lines.extend(f"{key}={value}" for key, value in updates.items())
+        config_file.write_text("\n".join(lines) + "\n")
+        atomic_json(marker, {"memory_mb": memory_mb})
 
     def webcam_flags(self):
         """Show the Mac's camera to Android's camera app when one is connected."""
@@ -471,9 +567,11 @@ class Controller:
             active = self.device()
             if not active and not self.running_emulator():
                 self.select_start_port()
+                memory = self.memory_budget()
+                self.prepare_memory(memory["selected_mb"])
                 argv = [self.tool("emulator"), "-avd", self.avd, "-port", str(self.config["port"]),
                         "-no-window", "-no-boot-anim", "-gpu", self.config["gpu"], "-accel", "on",
-                        "-memory", str(self.config["memory_mb"]), "-cores", str(self.config["cores"]),
+                        "-memory", str(memory["selected_mb"]), "-cores", str(self.config["cores"]),
                         "-no-metrics", *self.webcam_flags()]
                 if not self.quick_boot:
                     argv.append("-no-snapshot")
@@ -486,7 +584,9 @@ class Controller:
                     if descriptor.get("api") != self.api or descriptor.get("image_tag") != self.image_tag or descriptor.get("sha256") != hashlib.sha256(ramdisk.read_bytes()).hexdigest():
                         raise SubsystemError("Magisk ramdisk version or digest does not match")
                     argv += ["-ramdisk", str(ramdisk), "-feature", "-SystemAsRoot"]
-                atomic_json(self.root / "emulator.json", self.spawn(argv, "emulator.log"))
+                record = self.spawn(argv, "emulator.log")
+                record.update({"memory_mb": memory["selected_mb"], "memory_mode": memory["mode"]})
+                atomic_json(self.root / "emulator.json", record)
             deadline = time.monotonic() + self.boot_timeout
             while time.monotonic() < deadline:
                 if self.device() and self.adb("shell", "getprop", "sys.boot_completed", check=False).stdout.strip() == "1":
@@ -521,9 +621,10 @@ class Controller:
             error = None
         except SubsystemError as e:
             state, error = "unavailable", str(e)
+        running = self.running_emulator()
         return {"state": state, "error": error, "android": DEFAULTS["android"], "upgrade_needed": self.outdated,
                 "serial": self.serial, "configured": self.configured() and not self.outdated,
-                "runtime_process_active": self.running_emulator(),
+                "runtime_process_active": running, "memory": self.memory_status(running),
                 "windows": self.windows(), "config": self.config, "logs": str(self.logs),
                 "provision": read_json(self.root / "provision-report.json", {})}
 
@@ -712,8 +813,9 @@ class Controller:
             if "NO_MATCHING_ABIS" in output:
                 abis = self.adb("shell", "getprop", "ro.product.cpu.abilist", check=False).stdout.strip() or self.abi
                 raise SubsystemError(f"This app's native code does not match the CPU types of this Android system ({abis}). "
-                                     "An Intel Mac needs ARM translation to run apps built only for arm64 (many games): rebuild with ./build.sh "
-                                     "(not --pure or --no-arm-translation), or run scripts/provision-arm-translation.py.")
+                                     "An Intel Mac needs ARM translation to run apps built only for arm64 (many games). "
+                                     "Use an APK with x86_64 support, or explicitly opt into GPL components with "
+                                     "./build.sh --with-gpl to enable ARM translation.")
             if result.returncode or "Success" not in result.stdout:
                 raise SubsystemError(output[-2000:] or "APK installation failed")
             return {"installed": [p.name for p in paths]}

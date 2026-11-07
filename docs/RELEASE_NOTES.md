@@ -1,3 +1,5 @@
+> These are the published 1.1.0 release notes. For changes on the current branch, including automatic memory budgeting, an English-only UI and AOSP-only installation defaults, see [CHANGELOG.md](../CHANGELOG.md#unreleased).
+
 ## aeroandroid 1.1.0 · macOS DMG (Apple Silicon + Intel)
 
 **Download:** `aeroandroid-1.1.0-macOS-universal.dmg` — Apple Silicon and Intel Macs (Intel: 2018 or newer), macOS 14+. Not Windows.

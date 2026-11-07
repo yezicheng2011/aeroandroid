@@ -3,6 +3,18 @@
 This is a plain-language review of how aeroandroid fits under the Apache License 2.0. It is **not legal advice**;
 have a lawyer confirm it before a commercial release.
 
+## Installation policy
+
+The default `./build.sh` (also `--pure`) installs AOSP only and skips optional Magisk, Vector,
+microG signature modules and third-party app archives. The existing full edition requires explicit
+`--with-gpl` opt-in. Original aeroandroid code remains Apache-2.0; this change adds no dependency.
+On reinstall, AOSP disables an existing Magisk ramdisk override but preserves installed APKs and userdata.
+Existing GPL apps are not silently removed; users must uninstall them if they no longer want them.
+
+This policy does not make the external runtime GPL-free: Android includes the GPL Linux kernel,
+the emulator has separately licensed components, and the build uses Temurin OpenJDK under GPL-2.0
+with the Classpath Exception. Those upstream licenses and notices still apply.
+
 ## Short answer
 
 The code and assets in this repository can be released under Apache-2.0, because:
@@ -29,7 +41,7 @@ The repository contains no GPL code, no Google code and no prebuilt binaries oth
 
 | Component | License | Used for |
 |-----------|---------|----------|
-| Android SDK emulator, platform, build-tools, cmdline-tools, system image | Android SDK License, AOSP (Apache-2.0 and others) | The Android runtime; the user accepts Google's SDK license in the installer |
+| Android SDK emulator, platform, build-tools, cmdline-tools, system image | Android SDK License and component licenses, including Apache-2.0 and GPL (Linux kernel) | The Android runtime; the user accepts Google's SDK license in the installer |
 | OpenJDK 17 (Temurin) | GPL-2.0 with Classpath Exception | Building the guest APKs |
 | CPython (python-build-standalone) | PSF | Running the backend |
 | scrcpy | Apache-2.0 | Fallback display path |
@@ -37,9 +49,9 @@ The repository contains no GPL code, no Google code and no prebuilt binaries oth
 | Vector | GPL-3.0 | Module framework for microG (full edition only) |
 | microG GmsCore, Companion | Apache-2.0 | Google API compatibility (full edition only) |
 | microg-spoof (from aeroandroid.com source zip) | GPL-3.0-only | Signature compatibility (full edition only) |
-| Aurora Store | GPL-3.0-or-later | Pre-installed app, pinned F-Droid APK |
+| Aurora Store | GPL-3.0-or-later | Optional full-edition app, pinned F-Droid APK |
 | Google APIs x86_64 system image (Intel Macs, full edition) | Android SDK License | Source of AOSP's ARM translator; only the translator files are copied out, the rest is discarded |
-| Fennec F-Droid | MPL-2.0 | Pre-installed app, pinned F-Droid APK |
+| Fennec F-Droid | MPL-2.0 | Optional full-edition app, pinned F-Droid APK |
 
 Because these arrive on the user's machine straight from their upstreams, this project is not redistributing them,
 and a GPL component sitting next to Apache-2.0 code on one disk is a mere aggregate, not a combined work.

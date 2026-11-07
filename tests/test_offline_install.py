@@ -7,12 +7,59 @@ import unittest
 import zipfile
 import json
 import hashlib
-from unittest.mock import patch
+import sys
+from unittest.mock import patch, Mock
 from xml.dom import minidom
 
 MODULE = Path(__file__).resolve().parents[1] / 'scripts/setup-offline-mac.py'
 spec = importlib.util.spec_from_file_location('installer', MODULE)
 installer = importlib.util.module_from_spec(spec); spec.loader.exec_module(installer)
+
+class EditionTests(unittest.TestCase):
+    def test_default_archives_exclude_extensions_for_both_architectures(self):
+        for name in ('runtime-lock.json', 'runtime-lock-x86_64.json'):
+            lock = json.loads((MODULE.parent / name).read_text())
+            selected = installer.selected_archives(lock)
+            self.assertTrue(selected)
+            self.assertTrue(all(not item['relative_path'].startswith('provision/') for item in selected))
+            self.assertTrue(any(item.get('kind') == 'jdk' for item in selected))
+            full = installer.selected_archives(lock, graphics_only=False)
+            self.assertTrue(any(item.get('kind') == 'magisk' for item in full))
+            self.assertTrue(any(item.get('kind') == 'vector' for item in full))
+            with patch.dict('os.environ', {'AEROANDROID_ARM_TRANSLATION': '0'}):
+                self.assertFalse(any(item.get('kind') == 'arm_translation'
+                                     for item in installer.selected_archives(lock, graphics_only=False)))
+
+    def test_cli_defaults_to_aosp_and_explicitly_allows_gpl_opt_in(self):
+        for options, expected in (([], True), (['--graphics-only'], True), (['--with-gpl'], False)):
+            with tempfile.TemporaryDirectory() as folder, self.subTest(options=options):
+                with patch.object(sys, 'argv', [str(MODULE), folder, '--root', folder] + options), \
+                     patch.object(installer.platform, 'system', return_value='Darwin'), \
+                     patch.object(installer.shutil, 'disk_usage', return_value=Mock(free=100 * 1024**3)), \
+                     patch.object(installer.subprocess, 'run'), patch.object(installer, 'install') as install:
+                    installer.main()
+                    self.assertEqual(install.call_args.kwargs['graphics_only'], expected)
+
+    def test_aosp_installs_from_a_cache_without_any_provisioning_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'installation'; cache = Path(directory) / 'cache'
+            metadata = cache / 'sdk-macos'; metadata.mkdir(parents=True)
+            (metadata / 'repository2-3.xml').write_text('<repository><license id="android-sdk-license">Terms</license></repository>')
+            archive = cache / 'runtime.bin'; archive.write_bytes(b'runtime')
+            lock = {'android': 17, 'archives': [
+                {'relative_path': 'runtime.bin', 'kind': 'python', 'sha256': hashlib.sha256(b'runtime').hexdigest()},
+                {'relative_path': 'provision/Magisk.apk', 'kind': 'magisk', 'sha256': 'not-downloaded'},
+                {'relative_path': 'provision/Vector.zip', 'kind': 'vector', 'sha256': 'not-downloaded'}]}
+            java_home = root / 'runtime/java/jdk/Contents/Home'; java_home.mkdir(parents=True)
+            (root / 'config.json').write_text(json.dumps({'android': 17, 'image_tag': 'default', 'magisk_ramdisk': 'old-root.img'}))
+            with patch.object(installer, 'runtime_installed', return_value=True), \
+                 patch.object(installer, 'package_records', return_value=[]), \
+                 patch.object(installer.subprocess, 'run') as run:
+                installer.install(cache, root, lock, accept_licenses=True, build=False)
+            self.assertNotIn('magisk_ramdisk', json.loads((root / 'config.json').read_text()))
+            self.assertEqual(run.call_count, 1)
+            self.assertIn('create', run.call_args.args[0])
+            self.assertFalse((cache / 'provision').exists())
 
 class ArchiveTests(unittest.TestCase):
     def test_valid_package_layout_and_executable_bits(self):

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Choose a host-aware Android memory budget at startup, with configurable automatic bounds and a Manual mode. Preserve existing explicit allocations. Show the active budget and next-start estimate, and discard incompatible Quick Boot snapshots without deleting userdata when the budget changes. Live VM resizing is not supported.
+- Use English throughout the Mac UI, including installations with an old Chinese preference.
+- Default to AOSP only. Optional root, microG and pre-installed apps require explicit `--with-gpl`. Fix fresh-cache AOSP installs requiring skipped provisioning archives.
+- Keep the Apache-2.0 license and existing attribution. Add no third-party dependency; document the separate Android and JDK licenses without claiming a GPL-free runtime.
+
 ## 1.1.0
 
 - The DMG installer is `Install aeroandroid.command`. Its prompts, the other `.command` scripts, and the install notes are English. Copyright attribution is daniel.ye. The installed app is `~/Applications/Android Subsystem.app`; the copy in the DMG is only a sample. Gatekeeper reports that it cannot verify the developer (ad-hoc signature).
