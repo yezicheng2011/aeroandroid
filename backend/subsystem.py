@@ -23,6 +23,7 @@ import time
 import uuid
 
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\Z")
+WIDGET_CLASS = re.compile(r"\.?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
 COMPANION = "dev.dan.androidsubsystem"
 AUTHORITY = COMPANION + ".bridge"
 DEFAULTS = {"android": 17, "image_tag": "default", "port": 5580, "memory_mb": 4096, "memory_mode": "auto",
@@ -110,6 +111,28 @@ def package_name(value):
     if not isinstance(value, str) or not PACKAGE.fullmatch(value):
         raise SubsystemError("Invalid Android package name")
     return value
+
+
+def widget_provider(value):
+    """A flattened Android component, canonicalized for short/full class comparisons."""
+    if not isinstance(value, str) or len(value) > 512 or value.count("/") != 1:
+        raise SubsystemError("Invalid Android widget provider")
+    package, activity = value.split("/")
+    if not PACKAGE.fullmatch(package) or not WIDGET_CLASS.fullmatch(activity):
+        raise SubsystemError("Invalid Android widget provider")
+    return package + "/" + (package + activity if activity.startswith(".") else activity)
+
+
+def widget_id(value):
+    if type(value) is not int or not 1 <= value <= 2147483647:
+        raise SubsystemError("Widget ID must be a positive whole number")
+    return value
+
+
+def widget_size(width, height):
+    if any(type(value) is not int or not 64 <= value <= 1280 for value in (width, height)):
+        raise SubsystemError("Widget width and height must be whole numbers between 64 and 1280 dp")
+    return width, height
 
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -1010,17 +1033,136 @@ class Controller:
         self.adb("pull", remote, str(dest) + "/", timeout=240)
         return {"exported": str(output)}
 
-    def bridge(self, endpoint):
-        if endpoint not in {"apps", "notifications", "status"}:
-            raise SubsystemError("Unknown bridge endpoint")
-        result = self.adb("shell", "content", "query", "--uri", f"content://{AUTHORITY}/{endpoint}")
-        match = re.search(r"payload=([A-Za-z0-9+/=]+)", result.stdout)
+    @staticmethod
+    def bridge_payload(output):
+        match = re.search(r"payload=([A-Za-z0-9+/=]+)", output)
         if not match:
-            raise SubsystemError("Mac Bridge companion unavailable")
+            raise SubsystemError("Mac Bridge companion unavailable; rebuild the guest bridge and try again")
         try:
-            return json.loads(base64.b64decode(match[1], validate=True))
+            data = json.loads(base64.b64decode(match[1], validate=True))
         except (ValueError, UnicodeError) as e:
             raise SubsystemError("Invalid companion response") from e
+        if not isinstance(data, dict):
+            raise SubsystemError("Invalid companion response")
+        if data.get("error"):
+            message = data["error"]
+            raise SubsystemError(message if isinstance(message, str) else "Android rejected the bridge request")
+        return data
+
+    def bridge(self, endpoint):
+        if endpoint not in {"apps", "notifications", "status", "widget-providers", "widgets"}:
+            raise SubsystemError("Unknown bridge endpoint")
+        result = self.adb("shell", "content", "query", "--uri", f"content://{AUTHORITY}/{endpoint}")
+        return self.bridge_payload(result.stdout)
+
+    def widget_call(self, method, params):
+        if method not in {"widget-create", "widget-resize", "widget-delete"}:
+            raise SubsystemError("Unknown widget operation")
+        result = self.adb("shell", "content", "call", "--uri", f"content://{AUTHORITY}",
+                          "--method", method, "--arg", json.dumps(params, separators=(",", ":")))
+        return self.bridge_payload(result.stdout)
+
+    @staticmethod
+    def checked_widget(value):
+        if not isinstance(value, dict):
+            raise SubsystemError("Invalid widget response; rebuild the guest bridge")
+        try:
+            widget_id(value.get("id"))
+            widget_provider(value.get("provider"))
+            if any(type(value.get(key)) is not int or not 64 <= value[key] <= 2560
+                   for key in ("width_dp", "height_dp")):
+                raise SubsystemError("Invalid widget dimensions")
+            if any(type(value.get(key)) is not bool for key in ("bound", "configured")):
+                raise SubsystemError("Invalid widget setup state")
+        except SubsystemError as e:
+            raise SubsystemError("Invalid widget response; rebuild the guest bridge") from e
+        return value
+
+    def widget_inventory(self):
+        data = self.bridge("widgets")
+        if not isinstance(data.get("widgets"), list):
+            raise SubsystemError("Widget hosting is unavailable; rebuild the guest bridge")
+        records = [self.checked_widget(value) for value in data["widgets"]]
+        if len({value["id"] for value in records}) != len(records):
+            raise SubsystemError("The guest bridge returned duplicate widget IDs")
+        return records
+
+    def widget_providers(self):
+        # Opening the picker is an explicit request to start Android and install
+        # the current AppWidgetHost bridge, unlike background inventory polling.
+        self.native_session(COMPANION)
+        data = self.bridge("widget-providers")
+        providers = data.get("providers")
+        if not isinstance(providers, list):
+            raise SubsystemError("Widget hosting is unavailable; rebuild the guest bridge")
+        for provider in providers:
+            if not isinstance(provider, dict):
+                raise SubsystemError("Invalid widget provider response")
+            widget_provider(provider.get("provider"))
+        return {"providers": providers}
+
+    def widgets(self):
+        """Observe guest-owned instances without ever starting the VM or bridge."""
+        if not self.device():
+            return {"widgets": [], "running": False}
+        self.ready()
+        return {"widgets": self.widget_inventory(), "running": True}
+
+    def add_widget(self, provider, width_dp, height_dp):
+        component = widget_provider(provider)
+        widget_size(width_dp, height_dp)
+        self.native_session(COMPANION)
+        with self.locked():
+            self.ready()
+            installed = self.bridge("widget-providers").get("providers")
+            if not isinstance(installed, list):
+                raise SubsystemError("Widget hosting is unavailable; rebuild the guest bridge")
+            if not any(isinstance(item, dict) and widget_provider(item.get("provider")) == component
+                       for item in installed):
+                raise SubsystemError("This Android widget provider is no longer installed")
+            result = self.widget_call("widget-create", {"provider": provider, "width_dp": width_dp,
+                                                        "height_dp": height_dp})
+            record = self.checked_widget(result.get("widget"))
+            if widget_provider(record["provider"]) != component:
+                raise SubsystemError("The guest bridge created a different widget provider")
+            return {"widget": record}
+
+    def resize_widget(self, identifier, width_dp, height_dp):
+        widget_id(identifier)
+        widget_size(width_dp, height_dp)
+        self.native_session(COMPANION)
+        with self.locked():
+            self.ready()
+            result = self.widget_call("widget-resize", {"id": identifier, "width_dp": width_dp,
+                                                        "height_dp": height_dp})
+            record = self.checked_widget(result.get("widget"))
+            if record["id"] != identifier:
+                raise SubsystemError("The guest bridge resized a different widget")
+            return {"widget": record}
+
+    def delete_widget(self, identifier):
+        widget_id(identifier)
+        self.native_session(COMPANION)
+        with self.locked():
+            self.ready()
+            result = self.widget_call("widget-delete", {"id": identifier})
+            if result.get("deleted") is not True:
+                raise SubsystemError("The guest bridge did not delete the widget")
+            return {"deleted": True, "id": identifier}
+
+    def widget_session(self, identifier, configure=False):
+        widget_id(identifier)
+        session = self.native_session(COMPANION)
+        with self.locked():
+            self.ready()
+            record = next((record for record in self.widget_inventory() if record["id"] == identifier), None)
+            if record is None:
+                raise SubsystemError("This Android widget no longer exists; refresh the widget list")
+            session.update({"widget_id": identifier, "width": record["width_dp"], "height": record["height_dp"],
+                            "dpi": 160, "fps": max(15, min(session["fps"], 60)),
+                            "widget_setup": configure or not record["bound"] or not record["configured"],
+                            "widget_configure": configure})
+            return session
 
     def app_icon(self, package):
         """512x512 PNG of an installed app's launcher icon, rendered by the guest bridge."""
@@ -1150,6 +1292,12 @@ def dispatch(controller, action, params):
              "boot": lambda: controller.boot(), "stop": lambda: controller.stop(),
              "apps": lambda: controller.apps(), "launch": lambda: controller.launch(params["package"], params.get("label")),
              "native-session": lambda: controller.native_session(params["package"]),
+             "widget-providers": lambda: controller.widget_providers(), "widgets": lambda: controller.widgets(),
+             "add-widget": lambda: controller.add_widget(params["provider"], params["width_dp"], params["height_dp"]),
+             "resize-widget": lambda: controller.resize_widget(params["id"], params["width_dp"], params["height_dp"]),
+             "delete-widget": lambda: controller.delete_widget(params["id"]),
+             "widget-session": lambda: controller.widget_session(params["id"]),
+             "configure-widget": lambda: controller.widget_session(params["id"], configure=True),
              "close": lambda: controller.close(params["package"]), "install": lambda: controller.install(params["files"]),
              "uninstall": lambda: controller.uninstall(params["package"]), "push": lambda: controller.push(params["files"]),
              "files": lambda: controller.files(), "pull": lambda: controller.pull(params["remote"], params["destination"]),

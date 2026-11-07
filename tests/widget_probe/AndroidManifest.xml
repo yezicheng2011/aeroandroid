@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.dan.androidsubsystem.widgetprobe">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="36" />
+  <application android:label="Widget Probe" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:resizeableActivity="true">
+    <receiver android:name=".WidgetProbeProvider" android:label="Widget Probe" android:exported="true">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_probe_info" />
+    </receiver>
+    <activity android:name=".ConfigureActivity" android:exported="true">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
+    </activity>
+    <activity android:name=".ProbeActivity" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+    </activity>
+    <activity android:name=".SecondActivity" android:exported="false" />
+  </application>
+</manifest>

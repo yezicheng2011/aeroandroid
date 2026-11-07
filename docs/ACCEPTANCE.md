@@ -53,3 +53,14 @@ If the install step fails, keep the Terminal output of Install.command. If a gra
 - Check Unicode SIP MESSAGE send/receive and provider rejection; distinguish acceptance from a carrier delivery receipt.
 - Disconnect/reconnect and stop/restart Android. Verify account credentials survive an in-place bridge upgrade.
 - Confirm SIP Phone and SIP Messages never silently use the emulator's cellular modem. Test provider NAT compatibility separately.
+
+## Desktop widgets
+
+- Follow `tests/widget_probe/README.md`: cancel bind/config, add two independent instances, update counters,
+  resize, scroll a collection, verify item extras, and navigate the two-screen Activity stack back to the widget.
+- Confirm widget windows sit on the desktop, remain while the manager main window is closed, save positions,
+  and restore after restarting the manager/Android. Test multiple monitors, display removal and Spaces.
+- Focus or resize a widget during a permission/configuration screen; it must not relaunch the host or bounce sizes.
+- Open another app from a widget: the exact deep link and state must survive foreground promotion and Back.
+- Reconfigure and cancel an existing widget, rapidly hide/show it, uninstall its provider, and verify other instances
+  keep receiving updates. Test the third-party widgets you actually need; do not infer universal support from the probe.

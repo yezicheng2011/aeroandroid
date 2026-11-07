@@ -17,6 +17,11 @@
         <activity android:name=".BridgeActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
+        <activity android:name=".WidgetHostActivity" android:label="Desktop widget" android:exported="true"
+            android:permission="android.permission.DUMP" android:taskAffinity=""
+            android:documentLaunchMode="always" android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboard|keyboardHidden|uiMode"
+            android:theme="@style/WidgetHostTheme" />
         <activity android:name=".sip.PhoneActivity" android:label="SIP Phone" android:exported="true" android:launchMode="singleTop">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <intent-filter><action android:name="android.intent.action.DIAL" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>

@@ -3,6 +3,10 @@ package dev.dan.androidsubsystem;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.ContentObserver;
+import android.database.Cursor;
+import android.net.Uri;
+import android.util.Base64;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -116,6 +120,9 @@ public final class SurfaceServer {
         volatile int width, height, dpi, displayId;
         int fps;
         String packageName;
+        int widgetId;
+        boolean widgetConfigure;
+        ContentObserver widgetObserver;
         long lastFrame, pointerDown;
         long framesSent;
         boolean imageCallbackLogged;
@@ -180,6 +187,12 @@ public final class SurfaceServer {
                 if (!MessageDigest.isEqual(token, supplied) || hello.optInt("version") != 1) throw new SecurityException("Authentication failed");
                 packageName = hello.getString("package");
                 if (!packageName.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")) throw new IllegalArgumentException("Bad package");
+                if (hello.has("widget_id")) {
+                    widgetId = hello.getInt("widget_id");
+                    widgetConfigure = hello.optBoolean("widget_configure", false);
+                    if (widgetId <= 0 || !"dev.dan.androidsubsystem".equals(packageName)
+                            || widgetRecord() == null) throw new IllegalArgumentException("Unknown desktop widget");
+                }
                 width = hello.optInt("width", 1280); height = hello.optInt("height", 960);
                 dpi = hello.optInt("dpi", 200); fps = hello.optInt("fps", 30);
                 validateSize(width, height, dpi);
@@ -198,16 +211,24 @@ public final class SurfaceServer {
                 if (display == null) throw new IllegalStateException("Virtual display creation failed");
                 displayId = display.getDisplay().getDisplayId();
                 logDisplay("created");
+                if (widgetId > 0) {
+                    widgetObserver = new ContentObserver(imageHandler) {
+                        @Override public void onChange(boolean selfChange) { publishWidgetState(); }
+                    };
+                    context.getContentResolver().registerContentObserver(widgetUri(), true, widgetObserver);
+                }
                 startApplication();
                 JSONObject ready = new JSONObject(); ready.put("event", "ready"); ready.put("display", displayId);
                 ready.put("details", displayDetails());
                 ready.put("width", width); ready.put("height", height); ready.put("transport", "rgba-tcp-v1"); json(ready);
+                if (widgetId > 0) publishWidgetState();
                 socket.setSoTimeout(0);
                 while (!closed.get()) control(readControl());
             } catch (Throwable failure) {
                 signalFailure("session", failure);
             } finally {
                 closed.set(true);
+                if (widgetObserver != null) context.getContentResolver().unregisterContentObserver(widgetObserver);
                 if (display != null) { try { display.release(); } catch (RuntimeException failure) { System.err.println("Surface display cleanup: " + failure); } }
                 if (reader != null) { try { reader.close(); } catch (RuntimeException failure) { System.err.println("Surface reader cleanup: " + failure); } }
                 if (images != null) images.quitSafely();
@@ -219,7 +240,7 @@ public final class SurfaceServer {
             return next;
         }
         static void validateSize(int w, int h, int density) {
-            if (w < 320 || h < 320 || w > 2560 || h > 2560 || density < 100 || density > 640) throw new IllegalArgumentException("Bad display size");
+            if (w < 64 || h < 64 || w > 2560 || h > 2560 || density < 100 || density > 640) throw new IllegalArgumentException("Bad display size");
         }
         /** Called on the image thread for every new picture. Pictures that come in faster than the frame rate
          * are not thrown away: the newest one waits for its turn. Dropping it would leave the Mac on a stale
@@ -270,9 +291,18 @@ public final class SurfaceServer {
             }
         }
         void startApplication() throws Exception {
-            Intent intent = context.getPackageManager().getLaunchIntentForPackage(packageName);
-            if (intent == null || intent.getComponent() == null) throw new IllegalArgumentException("No launcher activity for " + packageName);
-            Process process = new ProcessBuilder("am", "start", "--display", String.valueOf(displayId), "-n", intent.getComponent().flattenToString()).redirectErrorStream(true).start();
+            java.util.List<String> arguments = new java.util.ArrayList<>();
+            java.util.Collections.addAll(arguments, "am", "start", "--display", String.valueOf(displayId), "-n");
+            if (widgetId > 0) {
+                arguments.add("dev.dan.androidsubsystem/.WidgetHostActivity");
+                java.util.Collections.addAll(arguments, "-d", "aeroandroid-widget:" + widgetId,
+                    "--ei", "appWidgetId", String.valueOf(widgetId), "--ez", "reconfigure", String.valueOf(widgetConfigure));
+            } else {
+                Intent intent = context.getPackageManager().getLaunchIntentForPackage(packageName);
+                if (intent == null || intent.getComponent() == null) throw new IllegalArgumentException("No launcher activity for " + packageName);
+                arguments.add(intent.getComponent().flattenToString());
+            }
+            Process process = new ProcessBuilder(arguments).redirectErrorStream(true).start();
             // Drain the bounded command output to avoid a blocked child process.
             ByteArrayOutputStreamLimited log = new ByteArrayOutputStreamLimited();
             byte[] buffer = new byte[1024]; int n;
@@ -281,6 +311,38 @@ public final class SurfaceServer {
             System.out.println("Surface launch package=" + packageName + " display=" + displayId
                     + " exit=" + exit + " output=" + log.text().trim());
             if (exit != 0 || log.text().contains("Error:")) throw new IllegalStateException("Launch failed: " + log.text());
+        }
+        Uri widgetUri() { return Uri.parse("content://dev.dan.androidsubsystem.bridge/widgets"); }
+        JSONObject widgetRecord() throws Exception {
+            try (Cursor cursor = context.getContentResolver().query(widgetUri(), null, null, null, null)) {
+                if (cursor == null || !cursor.moveToFirst()) throw new IllegalStateException("Widget host is unavailable");
+                String encoded = cursor.getString(cursor.getColumnIndexOrThrow("payload"));
+                JSONObject inventory = new JSONObject(new String(Base64.decode(encoded, Base64.NO_WRAP), StandardCharsets.UTF_8));
+                org.json.JSONArray widgets = inventory.getJSONArray("widgets");
+                for (int index = 0; index < widgets.length(); index++) {
+                    JSONObject item = widgets.getJSONObject(index);
+                    if (item.getInt("id") == widgetId) return item;
+                }
+                return null;
+            }
+        }
+        void publishWidgetState() {
+            if (closed.get()) return;
+            try {
+                JSONObject item = widgetRecord();
+                if (item == null) {
+                    JSONObject removed = new JSONObject(); removed.put("event", "widget-removed");
+                    removed.put("id", widgetId); json(removed); return;
+                }
+                item.put("event", "widget-state"); json(item);
+                if (item.optBoolean("configured") && item.optBoolean("active") && !item.optBoolean("configuring")) {
+                    JSONObject ready = new JSONObject(); ready.put("event", "widget-ready");
+                    ready.put("id", widgetId); json(ready);
+                }
+            } catch (Exception failure) {
+                // A package update may briefly restart the provider. Leave the live surface intact.
+                System.err.println("Widget state unavailable: " + failure.getClass().getSimpleName());
+            }
         }
         /** Buttons from the Mac controller become gamepad key events; sticks, triggers and the
          * hat become one joystick motion event. Games that read the event source see a gamepad. */
@@ -355,8 +417,9 @@ public final class SurfaceServer {
             } else if ("gamepad".equals(type)) {
                 gamepad(message);
             } else if ("focus".equals(type)) {
-                // Re-select the existing activity on its display; Android owns Activity lifecycle.
-                startApplication();
+                // Do not restart the widget host over its permission, configuration or
+                // PendingIntent Activity. Those flows already own this focused display.
+                if (widgetId == 0) startApplication();
             } else if ("visibility".equals(type)) {
                 display.setSurface(message.getBoolean("visible") ? reader.getSurface() : null);
             } else if ("clipboard-get".equals(type)) {

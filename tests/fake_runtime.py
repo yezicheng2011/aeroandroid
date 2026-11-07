@@ -17,6 +17,60 @@ def png512():
     return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 512, 512, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
 
 
+WIDGET_PROVIDERS = [
+    {'provider': 'com.example.first/com.example.first.ExampleWidget', 'package': 'com.example.first',
+     'label': 'Example widget', 'app_label': 'Example', 'min_width_dp': 64, 'min_height_dp': 64,
+     'min_resize_width_dp': 64, 'min_resize_height_dp': 64, 'max_resize_width_dp': 1280,
+     'max_resize_height_dp': 1280, 'resize_mode': 3, 'has_configuration': True,
+     'configuration_optional': False, 'reconfigurable': True},
+    {'provider': 'com.example.clock/com.example.clock.ClockWidget', 'package': 'com.example.clock',
+     'label': 'Clock', 'app_label': 'Clock', 'min_width_dp': 64, 'min_height_dp': 64,
+     'min_resize_width_dp': 64, 'min_resize_height_dp': 64, 'max_resize_width_dp': 1280,
+     'max_resize_height_dp': 1280, 'resize_mode': 3, 'has_configuration': False,
+     'configuration_optional': False, 'reconfigurable': False}]
+
+
+def canonical_provider(value):
+    package, activity = value.split('/')
+    return package + '/' + (package + activity if activity.startswith('.') else activity)
+
+
+def widget_state(root):
+    path = root / 'widget-state.json'
+    return json.loads(path.read_text()) if path.exists() else {'next_id': 1, 'widgets': []}
+
+
+def widget_call(root, method, params):
+    state = widget_state(root)
+    if method == 'widget-create':
+        provider = next((item for item in WIDGET_PROVIDERS if
+                         canonical_provider(item['provider']) == canonical_provider(params['provider'])), None)
+        if provider is None:
+            return {'error': 'This Android widget provider is not installed'}
+        widget = {'id': state['next_id'], 'provider': provider['provider'], 'label': provider['label'],
+                  'width_dp': params['width_dp'], 'height_dp': params['height_dp'], 'bound': False,
+                  'configured': not provider['has_configuration'] or provider['configuration_optional'],
+                  'needs_permission': True, 'active': False, 'configuring': False,
+                  'provider_available': True, 'reconfigurable': provider['reconfigurable']}
+        state['next_id'] += 1
+        state['widgets'].append(widget)
+        result = {'widget': widget}
+    else:
+        widget = next((item for item in state['widgets'] if item['id'] == params['id']), None)
+        if widget is None:
+            return {'error': 'This Android widget no longer exists'}
+        if method == 'widget-resize':
+            widget.update({key: params[key] for key in ('width_dp', 'height_dp')})
+            result = {'widget': widget}
+        else:
+            state['widgets'].remove(widget)
+            result = {'deleted': True, 'id': params['id']}
+    pending = root / 'widget-state.tmp'
+    pending.write_text(json.dumps(state))
+    pending.replace(root / 'widget-state.json')
+    return result
+
+
 name = Path(sys.argv[0]).name
 root = Path(os.environ['TEST_RUNTIME_ROOT'])
 state_path = root / 'device.json'
@@ -66,11 +120,17 @@ elif name == 'adb':
             print('dev.dan.androidsubsystem')
         elif command[:2] == ['content', 'call'] and '--method' in command and command[command.index('--method') + 1] == 'storage-config':
             print('Result: Bundle[{configured=' + ('true' if command[command.index('--arg') + 1] else 'false') + '}]')
+        elif command[:2] == ['content', 'call'] and '--method' in command and command[command.index('--method') + 1] in ('widget-create', 'widget-resize', 'widget-delete'):
+            method = command[command.index('--method') + 1]
+            data = widget_call(root, method, json.loads(command[command.index('--arg') + 1]))
+            print('Result: Bundle[{payload=' + base64.b64encode(json.dumps(data).encode()).decode() + '}]')
         elif command[:2] == ['content', 'query']:
             endpoint = command[-1].rsplit('/', 1)[-1]
             if endpoint == 'apps': data = {'apps': [{'package': 'com.example.first', 'label': 'First'}, {'package': 'com.example.second', 'label': 'Second'}]}
             elif endpoint.startswith('icon?package='): data = {'icon': base64.b64encode(png512()).decode()}
             elif endpoint == 'notifications': data = {'notifications': [{'id': 'one', 'key': 'one', 'title': 'Hello', 'body': 'World', 'package': 'com.example.first', 'timestamp': 1}]}
+            elif endpoint == 'widget-providers': data = {'providers': WIDGET_PROVIDERS}
+            elif endpoint == 'widgets': data = {'widgets': widget_state(root)['widgets']}
             else: data = {'notification_access': True}
             print('Row: 0 payload=' + base64.b64encode(json.dumps(data).encode()).decode())
         elif command[0] == 'test': sys.exit(1)

@@ -125,6 +125,7 @@ final class SubsystemModel: ObservableObject {
     @Published var logsPath = ""
     @Published var memoryStatus: [String: Any] = [:]
     let backend = Backend()
+    let desktopWidgets = DesktopWidgetCoordinator()
     private var polling = false
     private var seenEvents = Set<String>()
     private var notificationStart = Date().timeIntervalSince1970 * 1000
@@ -186,6 +187,7 @@ final class SubsystemModel: ObservableObject {
         memoryStatus = response["memory"] as? [String: Any] ?? [:]
         logsPath = response["logs"] as? String ?? ""
         windows = Set((response["windows"] as? [String: Any] ?? [:]).keys).union(surfaceWindows.keys)
+        desktopWidgets.setRunning(state == "running")
         if old == "running" && state != "running" { apps = []; files = [] }
     }
     func refresh(reportErrors: Bool = true) async {
@@ -196,6 +198,7 @@ final class SubsystemModel: ObservableObject {
                 let result = try await backend.call("apps")
                 apps = (result["apps"] as? [[String: Any]] ?? []).map(AndroidApp.init)
                     .sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+                await desktopWidgets.refresh(loadProviders: true)
             }
         } catch { if reportErrors { self.error = error.localizedDescription } }
     }
@@ -207,6 +210,7 @@ final class SubsystemModel: ObservableObject {
             applyStatus(try await backend.call("status"))
             await loadStorageShares(reportErrors: false)
             if state == "running" && apps.isEmpty { await refresh(reportErrors: false) }
+            else if state == "running" { await desktopWidgets.refresh() }
             if state == "running" && notificationsEnabled { await pollNotifications() }
         } catch { /* Explicit operations show errors; background polls remain quiet. */ }
     }
@@ -219,8 +223,31 @@ final class SubsystemModel: ObservableObject {
     func stop() {
         operation(L10n.t("prog.stop")) {
             for controller in Array(self.surfaceWindows.values) { controller.close() }
+            self.desktopWidgets.closeAll()
             _ = try await self.backend.call("stop")
         }
+    }
+    func refreshWidgets() {
+        operation(L10n.t("widgets.loading")) { await self.desktopWidgets.refresh(loadProviders: true) }
+    }
+    func addWidget(_ provider: AndroidWidgetProvider, width: Int, height: Int) {
+        operation(L10n.t("widgets.adding", provider.label)) {
+            if self.state != "running" {
+                _ = try await self.backend.call("boot")
+                await self.installCompanionIfPresent()
+                self.applyStatus(try await self.backend.call("status"))
+            }
+            try await self.desktopWidgets.add(provider, width: width, height: height)
+        }
+    }
+    func showWidget(_ widget: AndroidDesktopWidget) {
+        operation(L10n.t("prog.open", widget.label)) { try await self.desktopWidgets.show(widget) }
+    }
+    func configureWidget(_ widget: AndroidDesktopWidget) {
+        operation(L10n.t("widgets.configuring", widget.label)) { try await self.desktopWidgets.configure(widget) }
+    }
+    func removeWidget(_ widget: AndroidDesktopWidget) {
+        operation(L10n.t("widgets.removing", widget.label)) { try await self.desktopWidgets.remove(widget) }
     }
     func launch(_ app: AndroidApp) {
         if let controller = surfaceWindows[app.package] { controller.showWindow(nil); controller.window?.makeKeyAndOrderFront(nil); return }
@@ -701,6 +728,7 @@ struct MainView: View {
                 }.padding(.horizontal, 16).padding(.top, 22)
                 List(selection: $section) {
                     Label(model.t("nav.library"), systemImage: "square.grid.2x2").tag("apps")
+                    Label(model.t("nav.widgets"), systemImage: "rectangle.3.group").tag("widgets")
                     Label(model.t("nav.files"), systemImage: "folder").tag("files")
                     Label(model.t("nav.settings"), systemImage: "slider.horizontal.3").tag("settings")
                 }.listStyle(.sidebar)
@@ -721,6 +749,7 @@ struct MainView: View {
                         .padding(12).background(.green.opacity(0.08))
                 }
                 switch section {
+                case "widgets": DesktopWidgetsView(coordinator: model.desktopWidgets)
                 case "files": FilesView()
                 case "settings": RuntimeView()
                 default: LibraryView()
@@ -794,7 +823,7 @@ struct AndroidSubsystemApp: App {
     @StateObject private var model = SubsystemModel()
     private let notificationDelegate = NotificationDelegate()
     var body: some Scene {
-        WindowGroup(model.t("app.title")) {
+        Window(model.t("app.title"), id: "management") {
             MainView().environmentObject(model).onAppear {
                 notificationDelegate.launch = { package in model.launchPackage(package) }
                 UNUserNotificationCenter.current().delegate = notificationDelegate
@@ -816,8 +845,18 @@ struct AndroidSubsystemApp: App {
                 Divider()
                 Button(model.t("nav.stop")) { model.stop() }.disabled(model.busy)
             } else { Button(model.t("nav.start")) { model.boot() }.disabled(model.busy) }
-            Button(model.t("menu.show_window")) { NSApp.activate(ignoringOtherApps: true); NSApp.windows.first?.makeKeyAndOrderFront(nil) }
+            ShowManagementWindowButton()
             Button(model.t("menu.quit")) { NSApp.terminate(nil) }
+        }
+    }
+}
+
+private struct ShowManagementWindowButton: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button(L10n.t("menu.show_window")) {
+            openWindow(id: "management")
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 }
