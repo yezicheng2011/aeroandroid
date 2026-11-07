@@ -1,11 +1,15 @@
 """Run build.sh for real. `bash -n` only checks syntax; a variable used before it is set (which broke every
 invocation once) shows up only when the script executes."""
 import os
+import hashlib
+import json
 import plistlib
 import re
 from pathlib import Path
 import stat
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -40,7 +44,7 @@ class BuildScriptTests(unittest.TestCase):
         self.assertIn('Checking prerequisites', out); self.assertNoShellError(out, err)
 
     def test_every_option_is_accepted_and_bad_ones_are_refused(self):
-        for options in (['--android', '17'], ['--android=17'], ['--pure'], ['--no-arm-translation'], ['--mirror', 'cn'],
+        for options in (['--android', '17'], ['--android=17'], ['--pure'], ['--with-gpl'], ['--no-arm-translation'], ['--mirror', 'cn'],
                         ['--pure', '--no-arm-translation', '--android', '17', '--mirror', 'global']):
             _code, out, err = run(*options, '--check')
             self.assertIn('Checking prerequisites', out, options); self.assertNoShellError(out, err)
@@ -49,6 +53,58 @@ class BuildScriptTests(unittest.TestCase):
             self.assertEqual(code, 2); self.assertIn(f'Android {version} is no longer supported', err)
         self.assertEqual(run('--bogus')[0], 2)
         self.assertEqual(run('--mirror', 'mars', '--check')[0], 2)
+
+    def test_gpl_extensions_require_explicit_opt_in(self):
+        for options, expected in (([], '0'), (['--pure'], '0'), (['--with-gpl'], '1'),
+                                  (['--with-gpl', '--pure'], '0')):
+            _code, out, err = run(*options, '--check')
+            self.assertIn('Checking prerequisites', out)
+            self.assertRegex(err, rf'with_gpl={expected}\n')
+
+    def test_default_download_with_a_fresh_cache_never_fetches_provisioning_archives(self):
+        # Exercise the real downloader without network access or multi-GB SDK archives.
+        for arch in ('arm64', 'x86_64'):
+            with self.subTest(arch=arch), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder); scripts = root / 'scripts'; scripts.mkdir()
+                for source in ('build.sh', 'scripts/host.sh', 'scripts/setup-offline-mac.py'):
+                    shutil.copy2(ROOT / source, root / source)
+                payload = b'archive'
+                archives = [{'name': name, 'url': 'https://example.invalid/' + name,
+                             'relative_path': relative, 'sha256': hashlib.sha256(payload).hexdigest(), 'kind': kind}
+                            for name, relative, kind in (
+                                ('platform.zip', 'sdk-macos/platform.zip', 'platform'),
+                                ('jdk.tar.gz', 'mac-tools/jdk.tar.gz', 'jdk'),
+                                ('Magisk.apk', 'provision/Magisk.apk', 'magisk'),
+                                ('Vector.zip', 'provision/Vector.zip', 'vector'),
+                                ('microg.apk', 'provision/microg.apk', 'microg_services'),
+                                ('translation.zip', 'provision/translation.zip', 'arm_translation'))]
+                lock_name = 'runtime-lock.json' if arch == 'arm64' else 'runtime-lock-x86_64.json'
+                (scripts / lock_name).write_text(json.dumps({'arch': arch, 'archives': archives}))
+                tools = root / 'bin'; tools.mkdir()
+                shims = {'uname': f'[ "$1" = -s ] && echo Darwin || echo {arch}',
+                         'sysctl': 'echo 0', 'sw_vers': 'echo 14.0', 'xcrun': 'exit 0',
+                         'df': "printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\nfixture 100000000 0 100000000 0%% /\\n'"}
+                for name, body in shims.items():
+                    path = tools / name; path.write_text('#!/bin/sh\n' + body + '\n'); path.chmod(0o755)
+                curl = tools / 'curl'
+                curl.write_text(f'#!{sys.executable}\n' + '''import os, pathlib, sys
+args = sys.argv[1:]
+with open(os.environ['DOWNLOAD_LOG'], 'a') as log: log.write(args[-1] + '\\n')
+if '-o' in args: pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'archive')
+''')
+                curl.chmod(0o755)
+                cache = root / 'runtime-cache'; log = root / 'downloads.log'
+                environment = {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                               'DOWNLOAD_LOG': str(log), 'ANDROID_SUBSYSTEM_CACHE': str(cache)}
+                done = subprocess.run(['bash', str(root / 'build.sh'), '--download-only', '--mirror', 'global'],
+                                      capture_output=True, text=True, env=environment, timeout=30)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertTrue((cache / 'sdk-macos/platform.zip').is_file())
+                self.assertTrue((cache / 'mac-tools/jdk.tar.gz').is_file())
+                self.assertFalse((cache / 'provision').exists())
+                fetched = log.read_text()
+                for excluded in ('Magisk', 'Vector', 'microg', 'translation'):
+                    self.assertNotIn(excluded, fetched)
 
     def test_it_exports_the_lock_for_the_chip(self):
         expected = {'arm64': 'runtime-lock.json', 'x86_64': 'runtime-lock-x86_64.json'}

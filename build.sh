@@ -8,7 +8,7 @@ project_root="$(cd "$(dirname "$0")" && pwd)"
 source "$project_root/scripts/host.sh"
 cache="${ANDROID_SUBSYSTEM_CACHE:-$project_root/runtime-cache}"
 mirror="auto"          # auto | cn | global
-with_gpl=1
+with_gpl=0
 android=17
 download_only=0
 check_only=0
@@ -27,12 +27,10 @@ Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
                            Tencent Android SDK mirror. Default: auto (probe).
-  --pure                  Install the pure AOSP edition only: no Magisk, no microG,
-                           no GPL-3.0 parts.
-  (default)                Full edition: AOSP + Magisk + microG, which also fetches
-                           the GPL-3.0 parts (microG signature module, Magisk
-                           host_patch.sh) from upstream. --with-gpl is accepted
-                           as an alias.
+  --pure                  AOSP-only edition (default): no Magisk, microG or
+                           pre-installed apps. No optional GPL extensions.
+  --with-gpl              Explicitly opt into Magisk, microG, Aurora Store and
+                           Fennec, including GPL-3.0 extensions from upstream.
   --no-arm-translation     Intel Macs only: skip ARM translation (saves a 2 GB download and
                            8 GB of disk) and with it support for arm64-only apps.
   --download-only          Only fill ./runtime-cache, do not install.
@@ -134,15 +132,13 @@ fetch_runtime() {
   local line url rel sha
   while IFS=$'\t' read -r url rel sha; do
     line="$rel"; fetch "$url" "$cache/$line" "$sha"
-  done < <(python3 - "$lock" "$with_gpl" "$arm_translation" <<'PY'
-import json, sys
-lock = json.load(open(sys.argv[1]))
-full = sys.argv[2] == '1'
-for a in lock['archives']:
-    if not full and a['relative_path'].startswith('provision/'):
-        continue
-    if a.get('kind') == 'arm_translation' and sys.argv[3] != '1':
-        continue
+  done < <(python3 - "$project_root" "$lock" "$with_gpl" <<'PY'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location('installer', sys.argv[1] + '/scripts/setup-offline-mac.py')
+installer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(installer)
+lock = json.load(open(sys.argv[2]))
+for a in installer.selected_archives(lock, graphics_only=sys.argv[3] != '1'):
     print(a['url'], a['relative_path'], a['sha256'], sep='\t')
 PY
 )
@@ -239,9 +235,10 @@ intel_notice() {
   ──────────────────────────────────────────────────────────────────────
   Intel Mac detected
   Android runs here as x86_64. Many Android apps, especially most 3D games,
-  ship only arm64 code and need ARM translation to run. The full install adds
-  it (one extra ~2 GB download from Google, slower than native). With --pure
-  or --no-arm-translation those apps will NOT install. Plain Java/Kotlin apps
+  ship only arm64 code and need ARM translation to run. The optional
+  --with-gpl edition adds it (one extra ~2 GB download from Google, slower
+  than native). The default AOSP edition and --no-arm-translation cannot
+  install those apps. Plain Java/Kotlin apps
   and apps with x86_64 code are not affected.
   ──────────────────────────────────────────────────────────────────────
 

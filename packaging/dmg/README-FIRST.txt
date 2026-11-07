@@ -24,9 +24,10 @@ First-open prompt
 This software is ad-hoc signed. It has no Apple Developer certificate, so Gatekeeper does not say the file is damaged. It says it cannot verify the developer.
 Control-click the installer and choose Open, as in step 2.
 
-The default install is the full edition: AOSP + Magisk + microG, with Aurora Store and Fennec (Firefox) pre-installed. Android camera apps can use the Mac camera.
-Pure AOSP only: cd ~/aeroandroid && ./build.sh --pure
-The full edition downloads GPL-3.0 components from upstream. Those components keep their own licenses.
+The default install is Android 17, AOSP only, without Magisk, microG or pre-installed apps. Android camera apps can use the Mac camera.
+./build.sh --pure explicitly selects the same default. The optional ./build.sh --with-gpl downloads GPL extensions.
+The external Android runtime and JDK also have their own licenses, including GPL parts; see docs/LICENSING.md.
+New installs choose a memory budget at each start. Adjust Automatic bounds or select Manual in Settings; running VMs do not resize live.
 
 After installing
 Double-click any .apk. A Mac app of the same name is created in ~/Applications. It appears in Launchpad and the Dock and shows only that app's window.

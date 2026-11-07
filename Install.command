@@ -61,11 +61,11 @@ if [[ -f "$root/config.json" ]]; then
 fi
 mkdir -p "$root/runtime"
 if [[ ! -x "$root/runtime/python/bin/python3" ]]; then tar -xzf "$python_archive" -C "$root/runtime"; fi
-if [[ "${ANDROID_SUBSYSTEM_GRAPHICS_ONLY:-0}" == 1 ]]; then
-  echo 'This run installs only the pure AOSP graphics acceptance environment. Magisk and microG can be added later with Build.command.'
+if [[ "${ANDROID_SUBSYSTEM_GRAPHICS_ONLY:-1}" == 1 ]]; then
+  echo 'Installing the AOSP-only edition without optional GPL extensions. Use ./build.sh --with-gpl to opt into Magisk, microG and pre-installed apps.'
   "$root/runtime/python/bin/python3" -u "$project_root/scripts/setup-offline-mac.py" "$cache" --graphics-only
 else
   # Bash 3.2 treats an empty array as unset under set -u; keep these branches explicit.
-  "$root/runtime/python/bin/python3" -u "$project_root/scripts/setup-offline-mac.py" "$cache"
+  "$root/runtime/python/bin/python3" -u "$project_root/scripts/setup-offline-mac.py" "$cache" --with-gpl
 fi
 echo 'Install complete.'

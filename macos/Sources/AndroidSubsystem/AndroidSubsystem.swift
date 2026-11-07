@@ -78,7 +78,7 @@ final class Backend {
             throw BridgeFailure(message: detail.isEmpty ? L10n.t("err.controller_empty") : String(detail.suffix(3000)))
         }
         guard response["ok"] as? Bool == true else {
-            // The controller speaks English; a known error code gets the app's own translation.
+            // Prefer the app's stable English wording for known controller errors.
             if let code = response["code"] as? String, L10n.t("err.backend." + code) != "err.backend." + code {
                 throw BridgeFailure(message: L10n.t("err.backend." + code))
             }
@@ -105,8 +105,7 @@ final class SubsystemModel: ObservableObject {
     @Published var files: [String] = []
     @Published var notificationsEnabled = UserDefaults.standard.bool(forKey: "forwardNotifications")
     @Published var logsPath = ""
-    /// Remembered UI language preference: system | zh | en. Changing it refreshes SwiftUI.
-    @Published var uiLang: String = L10n.preference().rawValue
+    @Published var memoryStatus: [String: Any] = [:]
     let backend = Backend()
     private var polling = false
     private var seenEvents = Set<String>()
@@ -120,7 +119,6 @@ final class SubsystemModel: ObservableObject {
             $0.package.localizedCaseInsensitiveContains(search) }
     }
     var stateLabel: String {
-        _ = uiLang
         switch state {
         case "running": return L10n.t("state.running")
         case "booting": return L10n.t("state.booting")
@@ -128,23 +126,14 @@ final class SubsystemModel: ObservableObject {
         default: return L10n.t("state.unavailable")
         }
     }
-    /// UI string; depends on `uiLang` so SwiftUI refreshes when language changes.
     func t(_ key: String) -> String {
-        _ = uiLang
         return L10n.t(key)
     }
     func t(_ key: String, _ a0: CVarArg) -> String {
-        _ = uiLang
         return L10n.t(key, a0)
     }
     func t(_ key: String, _ a0: CVarArg, _ a1: CVarArg) -> String {
-        _ = uiLang
         return L10n.t(key, a0, a1)
-    }
-    func setUiLang(_ raw: String) {
-        let pref = UiLangPref(rawValue: raw) ?? .en
-        L10n.setPreference(pref)
-        uiLang = pref.rawValue
     }
 
     func beginPolling() {
@@ -176,6 +165,7 @@ final class SubsystemModel: ObservableObject {
         state = response["state"] as? String ?? "unavailable"
         android = response["android"] as? Int ?? 17
         config = response["config"] as? [String: Any] ?? [:]
+        memoryStatus = response["memory"] as? [String: Any] ?? [:]
         logsPath = response["logs"] as? String ?? ""
         windows = Set((response["windows"] as? [String: Any] ?? [:]).keys).union(surfaceWindows.keys)
         if old == "running" && state != "running" { apps = []; files = [] }
@@ -318,9 +308,11 @@ final class SubsystemModel: ObservableObject {
         let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path
         Task { _ = try? await backend.call("refresh-launchers", ["app_path": Bundle.main.bundleURL.path, "destination": folder]) }
     }
-    func saveConfiguration(memory: Int, cores: Int, fps: Int, gpu: String) {
+    func saveConfiguration(memoryMode: String, memory: Int, minimumMemory: Int, maximumMemory: Int, cores: Int, fps: Int, gpu: String) {
         operation(L10n.t("prog.save_config")) {
-            _ = try await self.backend.call("configure", ["memory_mb": memory, "cores": cores, "fps": fps, "gpu": gpu])
+            _ = try await self.backend.call("configure", ["memory_mode": memoryMode, "memory_mb": memory,
+                "memory_min_mb": minimumMemory, "memory_max_mb": maximumMemory,
+                "cores": cores, "fps": fps, "gpu": gpu])
         }
     }
     func showLogs() {
@@ -463,23 +455,51 @@ struct FilesView: View {
 
 struct RuntimeView: View {
     @EnvironmentObject var model: SubsystemModel
+    @CompatibleState<String> private var memoryMode = "auto"
     @CompatibleState<Int> private var memory = 4096
+    @CompatibleState<Int> private var minimumMemory = 2048
+    @CompatibleState<Int> private var maximumMemory = 8192
+    @CompatibleState<Bool> private var loadedConfiguration = false
     @CompatibleState<Int> private var cores = 4
     @CompatibleState<Int> private var fps = 30
     @CompatibleState<String> private var gpu = "auto"
+    private var memoryChoices: [Int] {
+        Array(Set([2048, 3072, 4096, 6144, 8192, 12288, 16384, memory, minimumMemory, maximumMemory])).sorted()
+    }
+    @ViewBuilder private var memoryControls: some View {
+        Picker(model.t("settings.memory_mode"), selection: $memoryMode) {
+            Text(model.t("settings.memory_auto")).tag("auto")
+            Text(model.t("settings.memory_manual")).tag("manual")
+        }
+        if memoryMode == "auto" {
+            Picker(model.t("settings.memory_min"), selection: $minimumMemory) {
+                ForEach(memoryChoices.filter { $0 % 256 == 0 && $0 <= maximumMemory }, id: \.self) {
+                    Text("\($0) MB").tag($0)
+                }
+            }
+            Picker(model.t("settings.memory_max"), selection: $maximumMemory) {
+                ForEach(memoryChoices.filter { $0 % 256 == 0 && $0 >= minimumMemory }, id: \.self) {
+                    Text("\($0) MB").tag($0)
+                }
+            }
+            Text(model.t("settings.memory_auto_hint")).font(.caption).foregroundStyle(.secondary)
+        } else {
+            Picker(model.t("settings.memory"), selection: $memory) {
+                ForEach(memoryChoices, id: \.self) { Text("\($0) MB").tag($0) }
+            }
+            Text(model.t("settings.memory_manual_hint")).font(.caption).foregroundStyle(.secondary)
+        }
+        if let active = model.memoryStatus["active_mb"] as? Int {
+            Text(model.t("settings.memory_active", active)).font(.caption).foregroundStyle(.secondary)
+        } else if let estimate = model.memoryStatus["selected_mb"] as? Int {
+            Text(model.t("settings.memory_estimate", estimate)).font(.caption).foregroundStyle(.secondary)
+            if model.memoryStatus["source"] as? String == "fallback" {
+                Text(model.t("settings.memory_fallback")).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
     var body: some View {
         Form {
-            Section(model.t("settings.language")) {
-                Picker(model.t("settings.language"), selection: Binding(
-                    get: { model.uiLang },
-                    set: { model.setUiLang($0) }
-                )) {
-                    Text(model.t("settings.lang.zh")).tag(UiLangPref.zh.rawValue)
-                    Text(model.t("settings.lang.en")).tag(UiLangPref.en.rawValue)
-                }
-                Text(model.t("settings.language_hint"))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
             Section(model.t("settings.runtime")) {
                 HStack {
                     Text(model.t("settings.android_ver"))
@@ -488,9 +508,7 @@ struct RuntimeView: View {
                 }
                 Text(model.t("settings.android_hint"))
                     .font(.caption).foregroundStyle(.secondary)
-                Picker(model.t("settings.memory"), selection: $memory) {
-                    ForEach([2048, 4096, 6144, 8192, 12288, 16384], id: \.self) { Text("\($0 / 1024) GB").tag($0) }
-                }
+                memoryControls
                 Stepper(model.t("settings.cores", cores), value: $cores, in: 2...12)
                 Picker(model.t("settings.fps"), selection: $fps) {
                     ForEach([15, 30, 60], id: \.self) { Text("\($0) FPS").tag($0) }
@@ -500,8 +518,11 @@ struct RuntimeView: View {
                     Text(model.t("settings.gpu.host")).tag("host")
                 }
                 Text(model.t("settings.gpu_hint")).font(.caption).foregroundStyle(.secondary)
-                Button(model.t("settings.save")) { model.saveConfiguration(memory: memory, cores: cores, fps: fps, gpu: gpu) }
-                    .disabled(model.busy || model.state == "running" || model.state == "booting")
+                Button(model.t("settings.save")) {
+                    model.saveConfiguration(memoryMode: memoryMode, memory: memory,
+                        minimumMemory: minimumMemory, maximumMemory: maximumMemory, cores: cores, fps: fps, gpu: gpu)
+                }
+                    .disabled(!loadedConfiguration || model.busy || model.state == "running" || model.state == "booting")
                 Text(model.t("settings.config_hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -528,11 +549,17 @@ struct RuntimeView: View {
                 }
             }
         }.formStyle(.grouped)
-        .onAppear {
-            memory = model.config["memory_mb"] as? Int ?? 4096
-            cores = model.config["cores"] as? Int ?? 4
-            fps = min(60, model.config["fps"] as? Int ?? 30)
-            gpu = model.config["gpu"] as? String ?? "auto"
+        .onReceive(model.$config) { configuration in
+            // Wait for the first backend response, then preserve unsaved edits during polling.
+            guard !loadedConfiguration, !configuration.isEmpty else { return }
+            memoryMode = configuration["memory_mode"] as? String ?? "auto"
+            memory = configuration["memory_mb"] as? Int ?? 4096
+            minimumMemory = configuration["memory_min_mb"] as? Int ?? 2048
+            maximumMemory = configuration["memory_max_mb"] as? Int ?? 8192
+            cores = configuration["cores"] as? Int ?? 4
+            fps = min(60, configuration["fps"] as? Int ?? 30)
+            gpu = configuration["gpu"] as? String ?? "auto"
+            loadedConfiguration = true
         }
     }
 }

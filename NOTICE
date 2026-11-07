@@ -11,7 +11,10 @@ Third-party components included in this repository:
   and some documentation is CC0-1.0, as recorded in third_party/GSFProxy/.reuse and LICENSES/.
   Keep those files with the source.
 
-Third-party components downloaded at build/run time on the user's own Mac (NOT included here; each keeps its own license):
+Third-party components downloaded at build/run time on the user's own Mac (NOT included here; each keeps its own license).
+The default install is AOSP only. Magisk, Vector, microG, Aurora Store, Fennec and Intel ARM translation
+are optional full-edition components selected with --with-gpl. Android includes the GPL Linux kernel;
+the default runtime and toolchain must not be described as GPL-free:
 - Android SDK emulator, platform, build-tools, cmdline-tools, platform-tools and the arm64-v8a / x86_64 system image
   (Android SDK License / AOSP licenses; the installer shows the SDK license for you to accept)
 - OpenJDK 17 (Eclipse Temurin, GPL-2.0 with Classpath Exception)

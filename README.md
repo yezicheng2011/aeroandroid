@@ -19,8 +19,8 @@ and opens in its own window with nothing else on screen.</p>
    saves a Mac app for it in `~/Applications`. That app then opens by itself.
 2. **Every Android app is a normal Mac app.** Own icon, own Dock tile, ⌘-Tab, ⌘-Q, Launchpad and Spotlight.
    Opening it shows only that app's window. No manager window, no emulator window.
-3. **Ready out of the box.** The full edition ships with microG, [Aurora Store](https://auroraoss.com) and
-   [Fennec](https://f-droid.org/packages/org.mozilla.fennec_fdroid/) (Firefox) installed.
+3. **Automatic memory budgeting.** New installs choose a memory budget for each Android start using your Mac's
+   memory and available headroom. Set a minimum and maximum, or choose a manual budget in Settings.
 4. **Your Mac's camera works.** Android camera apps use the Mac's physical camera.
 
 Under the hood it is the official Android Emulator running the AOSP Android image for your Mac's chip, with a native Metal
@@ -36,8 +36,11 @@ Requires a Mac (Apple Silicon, or an Intel Mac from 2018 on), macOS 14+, the Xco
 the Android runtime (about 1.8 GB) is fetched during installation from official sources, because the Android
 SDK license does not allow redistribution.
 
-The default install is the full edition: Android 17, AOSP, Magisk, microG, Aurora Store, and Fennec.
-`./build.sh --pure` is pure AOSP only (no Magisk, no microG, no pre-installed apps, no GPL-3.0 parts).
+A fresh default install is **Android 17, AOSP only**: no Magisk, microG, Aurora Store or other pre-installed apps.
+`./build.sh --pure` selects the same edition explicitly. Optional GPL extensions require `--with-gpl`;
+see [Licensing](#license) before enabling them. The external Android runtime and JDK have their own licenses.
+Reinstalling an existing full edition disables its Magisk boot override but keeps installed third-party APKs
+and their data; remove unwanted apps explicitly.
 
 1. Run `xcode-select --install` if you have not already. The installer builds the Mac app with Swift, so the
    Command Line Tools are required.
@@ -52,13 +55,14 @@ the app opens on your Mac. Do not use it as your install: its Android-side bridg
 the copy built on your Mac, and mixing the two fails with `Guest bridge install failed`.
 
 The installer saves a Quick Boot snapshot at the end, so the first app you open starts in seconds instead of
-cold booting (the snapshot takes disk space about equal to the memory setting). Open the installed Android
+cold booting (the snapshot takes disk space roughly equal to the selected memory budget).
+A memory-budget change discards the old snapshot and requires a cold boot; app data is retained. Open the installed Android
 Subsystem once: that makes the APK installer the default app for `.apk` files. From then on, double-clicking
 any APK is all it takes.
 
 **Android 17** (API 37) is the only Android version: Google's stable `android-37.0` image (arm64 or x86_64) and emulator 37.2.13,
-pinned in `scripts/runtime-lock.json` (`-x86_64` for Intel). Root uses Magisk v31.0, the first release with Zygisk for API 37.
-The microG signature module hooks `ComputerEngine`, whose methods are unchanged in Android 17 (checked against `android-17.0.0_r1`).
+pinned in `scripts/runtime-lock.json` (`runtime-lock-x86_64.json` for Intel). Optional root and microG
+provisioning is described in [docs/ROOT.md](docs/ROOT.md).
 
 **Coming from Android 16?** Android 16 has been removed. Run the installer once: it installs Android 17, carries your
 settings over and (in the full install) deletes the Android 16 system image to free disk space. Your Android 16 apps and data are not copied into
@@ -71,8 +75,8 @@ Everyday installs use the DMG above. A source zip is also on the site if you wan
 see [`BUILD.md`](BUILD.md) for contributor flags. Examples:
 
 ```bash
-./build.sh                # Android 17: AOSP + Magisk root + microG + pre-installed apps
-./build.sh --pure         # AOSP only: no Magisk, no microG, no GPL-3.0 parts
+./build.sh                # default: Android 17, AOSP only
+./build.sh --pure         # explicitly select the same AOSP-only edition
 ./build.sh --mirror cn    # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ```
 
@@ -114,7 +118,8 @@ the x86_64 emulator, system image, JDK, scrcpy and Python, each pinned by SHA-25
 The release DMG is a universal binary.
 
 **ARM translation.** Many Android apps, and most games, ship only arm64 code. The stock x86_64 Android image cannot
-run them, so the full install adds a translator:
+run them. The default AOSP install supports apps with x86 or x86_64 code.
+The optional full edition (`--with-gpl`) adds a translator:
 
 - It is AOSP's own open-source ARM-to-x86 binary translator (`libndk_translation`, "berberis", Apache-2.0).
 - Google's "Google APIs" x86_64 image contains it, so `build.sh` downloads that image (about 2 GB, once) and
@@ -163,6 +168,7 @@ anywhere else in the world. Mirrors that serve identical files were checked for 
 
 ## Pre-installed apps
 
+The default installation does not pre-install third-party apps. In the optional full edition (`--with-gpl`),
 microG (Services, Companion, GSFProxy) is provisioned by `scripts/provision-microg.py`. Aurora Store and Fennec
 come from `scripts/preinstall.json`, pinned by APK and signing-certificate SHA-256; nothing unpinned is installed.
 Add more with `python3 scripts/preinstall-apps.py --pin <https APK url>` and paste the printed entry.
@@ -170,23 +176,47 @@ Add more with `python3 scripts/preinstall-apps.py --pin <https APK url>` and pas
 microG is an open-source compatibility layer, not Google Play services: a successful install does not guarantee
 that every Google API, Play Integrity or banking app works. See [docs/MICROG.md](docs/MICROG.md).
 
+## Memory management
+
+New installations use **Automatic** memory mode with a 2 GB minimum and an 8 GB maximum. At each start,
+aeroandroid chooses a budget within those bounds using the Mac's physical memory and available memory,
+reserving headroom for macOS and other apps before applying your configured minimum. That minimum wins under
+pressure, so an unusually high floor can still cause swapping. If host measurements are unavailable, it uses the minimum.
+Settings shows the current allocation and next-start estimate; the estimate can change as other Mac apps use memory.
+
+In **Settings → Runtime**, choose Automatic and adjust its bounds, or select Manual for a fixed budget.
+Stop Android before saving runtime settings. Existing installs with an explicit memory setting keep that value
+in Manual mode; select Automatic to opt in. Switching modes keeps the saved manual budget.
+
+This is adaptive allocation **at startup**, not live VM memory resizing or ballooning. The Android Emulator's
+RAM size stays fixed until it stops. If the selected size changes, aeroandroid updates the AVD and removes its
+incompatible Quick Boot snapshots; it preserves Android apps and user data. Stop the subsystem from the menu
+bar to release its memory. Closing an app window alone keeps Android and background services running.
+See [docs/MEMORY.md](docs/MEMORY.md) for configuration and validation details.
+
 ## Known limits
 
-- macOS 14+ on Apple Silicon or Intel. Android 17, AOSP. Root and microG on Android 17, and Intel ARM translation, are new and untested on a Mac.
-- The subsystem keeps running in the background after you close an app's window; stop it from the menu bar item.
+- macOS 14+ on Apple Silicon or Intel. Android 17, AOSP. Optional root, microG and Intel ARM translation still need Mac hardware acceptance.
+- Memory is recalculated when Android starts; a running VM does not resize as workload changes.
 - Camera: the Mac camera is passed to the emulator as `webcam0` for both the front and back camera.
   macOS asks for camera permission the first time.
 - Several `.apk` files opened together are installed as one split-APK set.
-- Not GApps: no Google Play Store, Chrome or proprietary DroidGuard.
+- No Google Play Store, Chrome or proprietary DroidGuard is bundled.
 
-## Not included in this repository
+## Optional components
 
-The `microg-spoof/` module and Magisk's `host_patch.sh` are GPL-3.0 and are fetched by `build.sh` from upstream
-for the full edition (checksummed, with a notice); they stay GPL-3.0. Prebuilt APKs and the runtime cache are
-produced by the build scripts.
+`./build.sh --with-gpl` explicitly enables the existing full edition: Magisk root, microG, Aurora Store,
+Fennec and, on Intel, ARM translation. It downloads GPL-licensed components that retain their upstream terms.
+These extensions are skipped by default, including their archives in a fresh download cache.
+The `microg-spoof/` module and Magisk's `host_patch.sh` are fetched from upstream and are not tracked here.
 
 ## License
 
-Apache-2.0, Copyright 2026 daniel.ye. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for third-party components,
-and [`docs/LICENSING.md`](docs/LICENSING.md) for what you must do if you redistribute a build that contains them
-(the Android SDK components and the GPL parts are downloaded onto your Mac, not shipped by this project).
+Original aeroandroid code remains **Apache-2.0, Copyright 2026 daniel.ye**. See [`LICENSE`](LICENSE),
+[`NOTICE`](NOTICE) and [`docs/LICENSING.md`](docs/LICENSING.md). No new third-party dependency is needed for
+automatic memory management.
+
+AOSP-only means no optional root or GPL app extensions; it does **not** mean a GPL-free runtime.
+Android includes the GPL Linux kernel, and the existing Temurin JDK is GPL-2.0 with the Classpath Exception.
+These are separate upstream components downloaded onto your Mac, not relicensed as Apache-2.0.
+The lightweight DMG does not bundle the downloaded Android runtime.

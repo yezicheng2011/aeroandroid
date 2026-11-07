@@ -13,9 +13,9 @@
 
 ### One command
 ```bash
-./build.sh                 # full edition (default): Android 17, AOSP + Magisk + microG + Aurora Store + Fennec
-./build.sh --pure          # pure AOSP only: no Magisk, no microG, no pre-installed apps, no GPL-3.0 parts
-./build.sh --with-gpl      # alias of the default full edition
+./build.sh                 # default: Android 17, AOSP only
+./build.sh --pure          # explicitly select the AOSP-only default
+./build.sh --with-gpl      # opt in to Magisk, microG, Aurora Store and Fennec (includes GPL components)
 ./build.sh --mirror cn     # mainland China: GitHub via proxy, Android SDK via Tencent mirror
 ./build.sh --no-arm-translation   # Intel Macs: skip ARM translation (saves a 2 GB download and 8 GB of disk)
 ./build.sh --check         # prerequisites only
@@ -25,8 +25,20 @@ Environment: `GH_MIRROR` (default `https://gh-proxy.com/`), `SDK_MIRROR` (defaul
 
 Flow: check prerequisites (including the Xcode Command Line Tools) → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, and, in the full edition, the microG parts) → run `Install.command`, which builds the Mac app and installs it to `~/Applications/Android Subsystem.app`, then opens that copy. Run `Graphics-Acceptance.command` after that. The DMG's `Install aeroandroid.command` does the same thing after copying this tree to `~/aeroandroid`.
 
-### GPL components
-This repository is Apache-2.0. The microG signature module (`microg-spoof/`, derived from FakeGApps) and Magisk's `host_patch.sh` are GPL-3.0 and are not included. The default full edition has `build.sh` download them from upstream (SHA-256 checked) and print a license notice; they remain GPL-3.0 and must not be redistributed as Apache-2.0. `--with-gpl` is an alias of that default. `./build.sh --pure` is the pure-AOSP graphics edition, without Magisk or microG.
+### Licenses and optional extensions
+This repository remains Apache-2.0. The default build does not download or install optional Magisk,
+Vector, microG signature modules, Aurora Store or Fennec. `--pure` explicitly selects that same default.
+`--with-gpl` opts into the full edition, including its GPL-licensed components and upstream notices.
+Reinstalling an existing full edition as AOSP disables the Magisk boot override but preserves installed APKs
+and userdata. It does not automatically uninstall existing GPL applications.
+The required external Android runtime includes the GPL Linux kernel, and Temurin OpenJDK is GPL-2.0
+with the Classpath Exception. Neither edition is a completely GPL-free runtime. See [docs/LICENSING.md](docs/LICENSING.md).
+
+### Memory
+New installs use an automatic memory budget at each boot (2–8 GB by default), with headroom reserved for macOS.
+Existing explicit budgets stay in Manual mode. Settings exposes both modes and the automatic bounds.
+Changing the selected budget invalidates Quick Boot snapshots, so that boot is cold; userdata is retained.
+A running VM does not resize. See [docs/MEMORY.md](docs/MEMORY.md).
 
 ### Troubleshooting
 - **"Requires a Mac"**: only macOS is supported, on Apple Silicon or Intel; not Linux or Windows.

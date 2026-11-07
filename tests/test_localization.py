@@ -1,4 +1,4 @@
-"""The app is English by default, so English must be complete and nothing user-facing may be left in Chinese."""
+"""The app has one complete English catalog and no language-dependent UI."""
 import re
 import subprocess
 import unittest
@@ -16,32 +16,38 @@ def catalog(name):
 
 
 class CatalogTests(unittest.TestCase):
-    def test_english_has_every_string_chinese_has_and_the_reverse(self):
-        en, zh = catalog('en'), catalog('zh')
+    def test_english_catalog_covers_literal_ui_keys(self):
+        en = catalog('en')
         self.assertGreater(len(en), 100)
-        self.assertEqual(sorted(set(zh) - set(en)), [], 'missing from English: these would show Chinese or a raw key')
-        self.assertEqual(sorted(set(en) - set(zh)), [])
+        used = set()
+        for path in (ROOT / 'macos/Sources/AndroidSubsystem').glob('*.swift'):
+            used.update(re.findall(r'(?:L10n|model)\.t\("([^"\\]+)"', path.read_text()))
+        # This prefix is completed using a backend error code at runtime.
+        used.discard('err.backend.')
+        self.assertEqual(sorted(used - en.keys()), [])
 
-    def test_english_text_contains_no_chinese_except_the_name_of_the_language_itself(self):
-        offenders = {key: text for key, text in catalog('en').items() if CJK.search(text) and key != 'settings.lang.zh'}
-        self.assertEqual(offenders, {})
-
-    def test_placeholders_match_between_languages(self):
-        en, zh = catalog('en'), catalog('zh')
-        for key in en:
-            self.assertEqual(sorted(re.findall(r'\{\d\}', en[key])), sorted(re.findall(r'\{\d\}', zh[key])), key)
-
-    def test_english_is_the_default_and_the_fallback(self):
-        self.assertRegex(SWIFT, r'\?\? ""\) \?\? \.en')                  # no saved choice (or an old "system") -> English
-        self.assertIn('preference() == .zh ? .zh : .en', SWIFT)            # the system language is never consulted
-        self.assertIn('messages[.en]![key] ?? key', SWIFT)                 # a missing string falls back to English
+    def test_catalog_and_ui_are_english_only(self):
+        self.assertFalse(CJK.search(SWIFT))
+        self.assertNotIn('private static let zh:', SWIFT)
+        self.assertNotIn('settings.lang.zh', SWIFT)
+        self.assertIn('var text = en[key] ?? key', SWIFT)
+        self.assertNotIn('UserDefaults', SWIFT)
         self.assertNotIn('Locale.preferredLanguages', SWIFT)
+        ui = (ROOT / 'macos/Sources/AndroidSubsystem/AndroidSubsystem.swift').read_text()
+        self.assertNotIn('setUiLang', ui)
+        self.assertNotIn('settings.language', ui)
+
+    def test_memory_policy_is_explained_without_claiming_live_resize(self):
+        en = catalog('en')
+        self.assertIn('at each startup', en['settings.memory_auto_hint'])
+        self.assertIn('does not resize', en['settings.memory_auto_hint'])
+        self.assertIn('{0}', en['settings.memory_active'])
+        self.assertIn('{0}', en['settings.memory_estimate'])
 
 
 class RepositoryIsEnglishTests(unittest.TestCase):
-    ALLOWED_FILES = ('macos/Sources/AndroidSubsystem/L10n.swift',        # the optional Chinese catalog
-                     'docs/original/', 'third_party/', 'tests/')           # archived README, vendored code, test data
-    ALLOWED_TEXT = ('叶子诚', '中文')                                            # the copyright holder's name
+    ALLOWED_FILES = ('docs/original/', 'third_party/', 'tests/')     # archived README, vendored code, test data
+    ALLOWED_TEXT = ('叶子诚',)                                            # the copyright holder's name
 
     def test_no_user_facing_file_contains_chinese(self):
         files = subprocess.run(['git', 'ls-files', '-z'], cwd=ROOT, capture_output=True).stdout.decode().split('\0')

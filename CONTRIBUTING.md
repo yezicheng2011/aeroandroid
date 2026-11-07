@@ -10,8 +10,11 @@ https://aeroandroid.com/releases.html.
 `Install aeroandroid.command` in that DMG downloads the runtime and builds the app.
 It still needs the Xcode Command Line Tools (`xcode-select --install`).
 
-`./build.sh` from a checkout installs the full edition by default (Android 17, AOSP + Magisk + microG).
-`./build.sh --pure` is AOSP only. `--with-gpl` is an alias of the default. Android 17 is the only Android version.
+`./build.sh` and `./build.sh --pure` install Android 17 AOSP only by default.
+`--with-gpl` explicitly opts into the full edition, including GPL extensions. Android 17 is the only Android version.
+Do not add GPL dependencies to aeroandroid's original code; keep its Apache-2.0 license and third-party notices.
+The external Android runtime and JDK retain their upstream licenses (see `docs/LICENSING.md`).
+All new UI text, messages and documentation must be English.
 
 ## Checks
 

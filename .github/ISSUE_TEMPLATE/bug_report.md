@@ -14,7 +14,8 @@ labels: ''
 - macOS version:
 - Mac: Apple Silicon or Intel
 - aeroandroid version (DMG or `build.sh` flags):
-- `--pure` or the default full edition:
+- Memory mode, bounds and active allocation (Settings):
+- Default AOSP-only edition or explicit `--with-gpl` full edition:
 
 ## Logs
 

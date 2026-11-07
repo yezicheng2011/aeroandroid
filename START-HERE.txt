@@ -24,11 +24,15 @@ Command Line Tools (xcode-select --install), about 20 GB of free disk, and a net
 connection. The installer builds the Mac app with Swift, so the Command Line Tools
 are required.
 
-The default install is the full edition: Android 17, AOSP, Magisk, microG, Aurora Store,
-and Fennec. Android 17 is the only Android version (Android 16 has been removed; running
-the installer upgrades an older install and keeps its apps and data as a backup).
-  AOSP only:           ./build.sh --pure
-  --with-gpl           alias of the default full edition
+The default install is Android 17, AOSP only: no Magisk, microG or pre-installed apps.
+Android 17 is the only Android version. An older installation keeps its apps and data
+as a backup when upgraded. New installs use automatic memory budgeting at each start;
+choose Automatic or Manual in Settings. Running VMs do not resize live.
+  AOSP only (default): ./build.sh
+  Explicit AOSP only:  ./build.sh --pure
+  Optional full edition: ./build.sh --with-gpl (downloads GPL extensions)
+The external Android runtime and JDK retain their own licenses, including GPL parts.
+See docs/LICENSING.md; AOSP-only does not mean a GPL-free runtime.
 
 Building from a git checkout uses the same ./build.sh. See README.md and BUILD.md.
 
