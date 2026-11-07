@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add original SIP Phone and SIP Messages using the user's own account, with verified TLS/TCP signaling, G.711 RTP, encrypted account-password storage and Android default-role integration. Messages use SIP MESSAGE; carrier SMS requires a provider gateway. Enable emulator audio input and add Mac microphone usage descriptions. No SIP/codec dependency is added.
+
+- Share selected Mac folders directly through Android's document picker, with read/write or read-only access, seeking, in-place saves and no whole-file staging. Add native folder management, automatic reconnect, immediate revocation and protection against replacing an already open file. Retain the legacy copy exchange for apps without document-picker support.
+- Compile the Java guest bridge against the pinned Android SDK in CI, alongside Python/shell and native Swift checks.
+
 - Choose a host-aware Android memory budget at startup, with configurable automatic bounds and a Manual mode. Preserve existing explicit allocations. Show the active budget and next-start estimate, and discard incompatible Quick Boot snapshots without deleting userdata when the budget changes. Live VM resizing is not supported.
 - Use English throughout the Mac UI, including installations with an old Chinese preference.
 - Default to AOSP only. Optional root, microG and pre-installed apps require explicit `--with-gpl`. Fix fresh-cache AOSP installs requiring skipped provisioning archives.

@@ -21,6 +21,20 @@ struct AndroidApp: Identifiable {
     }
 }
 
+struct SharedMacFolder: Identifiable {
+    let id: String
+    let name: String
+    let path: String
+    let readOnly: Bool
+    init?(_ row: [String: Any]) {
+        guard let id = row["id"] as? String, let path = row["path"] as? String else { return nil }
+        self.id = id
+        self.path = path
+        name = row["name"] as? String ?? URL(fileURLWithPath: path).lastPathComponent
+        readOnly = row["read_only"] as? Bool ?? false
+    }
+}
+
 struct BridgeFailure: LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -103,6 +117,10 @@ final class SubsystemModel: ObservableObject {
     @Published var config: [String: Any] = [:]
     @Published var checks: [[String: Any]] = []
     @Published var files: [String] = []
+    @Published var sharedFolders: [SharedMacFolder] = []
+    @Published var storageRunning = false
+    @Published var storageLoaded = false
+    @Published var storageError: String?
     @Published var notificationsEnabled = UserDefaults.standard.bool(forKey: "forwardNotifications")
     @Published var logsPath = ""
     @Published var memoryStatus: [String: Any] = [:]
@@ -173,6 +191,7 @@ final class SubsystemModel: ObservableObject {
     func refresh(reportErrors: Bool = true) async {
         do {
             applyStatus(try await backend.call("status"))
+            await loadStorageShares(reportErrors: false)
             if state == "running" {
                 let result = try await backend.call("apps")
                 apps = (result["apps"] as? [[String: Any]] ?? []).map(AndroidApp.init)
@@ -186,6 +205,7 @@ final class SubsystemModel: ObservableObject {
         defer { polling = false }
         do {
             applyStatus(try await backend.call("status"))
+            await loadStorageShares(reportErrors: false)
             if state == "running" && apps.isEmpty { await refresh(reportErrors: false) }
             if state == "running" && notificationsEnabled { await pollNotifications() }
         } catch { /* Explicit operations show errors; background polls remain quiet. */ }
@@ -234,7 +254,10 @@ final class SubsystemModel: ObservableObject {
     func installCompanionIfPresent() async {
         guard let apk = Bundle.main.resourceURL?.appendingPathComponent("MacBridge.apk"),
               FileManager.default.fileExists(atPath: apk.path) else { return }
-        do { _ = try await backend.call("install", ["files": [apk.path]]) }
+        do {
+            _ = try await backend.call("install", ["files": [apk.path]])
+            _ = try await backend.call("configure-communications")
+        }
         catch { self.error = L10n.t("err.bridge_install", error.localizedDescription) }
     }
     func install(_ urls: [URL]) {
@@ -269,6 +292,49 @@ final class SubsystemModel: ObservableObject {
                 await self.loadFiles()
             }
         }
+    }
+    func loadStorageShares(reportErrors: Bool = true) async {
+        do {
+            let result = try await backend.call("storage-shares")
+            sharedFolders = (result["shares"] as? [[String: Any]] ?? []).compactMap(SharedMacFolder.init)
+            storageRunning = result["running"] as? Bool ?? false
+            storageLoaded = true
+            storageError = nil
+        } catch {
+            storageError = error.localizedDescription
+            if reportErrors { self.error = error.localizedDescription }
+        }
+    }
+    func shareFolders(readOnly: Bool) {
+        let panel = NSOpenPanel()
+        panel.title = L10n.t("storage.choose_folder")
+        panel.prompt = L10n.t("storage.share")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        let paths = panel.urls.map(\.path)
+        operation(L10n.t("storage.sharing")) {
+            for path in paths {
+                _ = try await self.backend.call("share-folder", ["path": path, "read_only": readOnly])
+            }
+            await self.loadStorageShares()
+        }
+    }
+    func unshareFolder(_ folder: SharedMacFolder) {
+        operation(L10n.t("storage.stopping_share")) {
+            _ = try await self.backend.call("unshare-folder", ["id": folder.id])
+            await self.loadStorageShares()
+        }
+    }
+    func connectStorage() {
+        operation(L10n.t("storage.connecting")) {
+            _ = try await self.backend.call("start-storage")
+            await self.loadStorageShares()
+        }
+    }
+    func openSharedFolder(_ folder: SharedMacFolder) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: folder.path, isDirectory: true))
     }
     func loadFiles() async {
         do { files = try await backend.call("files")["files"] as? [String] ?? [] }
@@ -432,24 +498,83 @@ struct LibraryView: View {
 
 struct FilesView: View {
     @EnvironmentObject var model: SubsystemModel
+    @CompatibleState<Bool> private var readOnly = false
+    private var storageLabel: String {
+        if !model.storageLoaded { return model.t("storage.loading") }
+        return model.t(model.storageRunning ? "storage.connected" : "storage.disconnected")
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(model.t("files.title")).font(.largeTitle.bold())
-            Text(model.t("files.hint"))
-                .foregroundStyle(.secondary)
-            HStack {
-                Button(model.t("files.import"), systemImage: "arrow.down.doc") { model.importFiles() }
-                Button(model.t("files.refresh"), systemImage: "arrow.clockwise") { Task { await model.loadFiles() } }
-            }.disabled(model.busy || model.state != "running")
-            List(model.files, id: \.self) { path in
-                HStack {
-                    Image(systemName: "doc")
-                    Text(URL(fileURLWithPath: path).lastPathComponent)
-                    Spacer()
-                    Button(model.t("files.export")) { model.exportFile(path) }.disabled(model.busy)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text(model.t("files.title")).font(.largeTitle.bold())
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(model.t("storage.title")).font(.title2.bold())
+                        Text(model.t("storage.hint")).foregroundStyle(.secondary)
+                        HStack {
+                            Button(model.t("storage.add_folder"), systemImage: "folder.badge.plus") {
+                                model.shareFolders(readOnly: readOnly)
+                            }
+                            Toggle(model.t("storage.read_only"), isOn: $readOnly).toggleStyle(.checkbox)
+                            Spacer()
+                            Button(model.t("storage.connect"), systemImage: "link") { model.connectStorage() }
+                                .disabled(model.sharedFolders.isEmpty)
+                        }.disabled(model.busy)
+                        Label(storageLabel, systemImage: model.storageRunning ? "checkmark.circle" : "link")
+                            .font(.callout).foregroundStyle(.secondary)
+                        if let message = model.storageError {
+                            Text(message).font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+                        }
+                        if model.sharedFolders.isEmpty {
+                            Text(model.t("storage.empty")).font(.callout).foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.sharedFolders) { folder in
+                                Divider()
+                                HStack(alignment: .top, spacing: 12) {
+                                    Image(systemName: "folder").font(.title3).padding(.top, 2)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(folder.name).font(.headline)
+                                        Text(folder.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                                        Text(model.t(folder.readOnly ? "storage.access_read_only" : "storage.access_read_write"))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button(model.t("storage.open_finder")) { model.openSharedFolder(folder) }
+                                    Button(model.t("storage.stop_sharing")) { model.unshareFolder(folder) }.disabled(model.busy)
+                                }
+                            }
+                        }
+                        Text(model.t("storage.scope")).font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
-            }
-        }.padding(28).task { if model.state == "running" { await model.loadFiles() } }
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(model.t("files.exchange_title")).font(.headline)
+                        Text(model.t("files.hint")).font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            Button(model.t("files.import"), systemImage: "arrow.down.doc") { model.importFiles() }
+                            Button(model.t("files.refresh"), systemImage: "arrow.clockwise") {
+                                Task {
+                                    await model.loadStorageShares()
+                                    if model.state == "running" { await model.loadFiles() }
+                                }
+                            }
+                        }.disabled(model.busy || model.state != "running")
+                        ForEach(model.files, id: \.self) { path in
+                            HStack {
+                                Image(systemName: "doc")
+                                Text(URL(fileURLWithPath: path).lastPathComponent)
+                                Spacer()
+                                Button(model.t("files.export")) { model.exportFile(path) }.disabled(model.busy)
+                            }
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                }
+            }.padding(28)
+        }.task {
+            await model.loadStorageShares()
+            if model.state == "running" { await model.loadFiles() }
+        }
     }
 }
 

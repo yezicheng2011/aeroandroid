@@ -23,7 +23,9 @@ python3 -m unittest discover -s tests
 bash -n build.sh
 ```
 
-GitHub Actions also runs shellcheck and, on macOS, `swift build --package-path macos`.
+GitHub Actions also runs shellcheck, builds and verifies the full guest APK with pinned Android tools,
+and runs `swift build --package-path macos` on macOS. Storage integration tests use actual local HTTP requests;
+see `docs/STORAGE.md` for the Mac/Android acceptance steps.
 
 Do not commit `artifacts/`, `runtime-cache/`, `microg-spoof/`, or `third_party/Magisk/`.
 Those are downloaded and verified by the build.
