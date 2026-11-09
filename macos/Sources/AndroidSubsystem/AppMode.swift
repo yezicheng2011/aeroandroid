@@ -195,6 +195,13 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
     /// when the helper quit at the end of the first install.
     private func installNext() {
         guard !installing, !waiting.isEmpty else { return }
+        if !RuntimePresence.isInstalled {
+            installing = true
+            started = true
+            showAlert(L10n.t("install.failed"), BridgeFailure(message: L10n.t("install.runtime_first")))
+            NSApp.terminate(nil)
+            return
+        }
         installing = true; started = true
         let urls = waiting.removeFirst()
         panel.show(L10n.t("install.working"))

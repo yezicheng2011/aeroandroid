@@ -1,6 +1,6 @@
 # aeroandroid contributor build
 
-> Everyday installs use the official DMG at [aeroandroid.com](https://aeroandroid.com/#download). This page is for contributors who want to customize the project.
+> Everyday installs use the official macOS package at [aeroandroid.com](https://aeroandroid.com/#download). This page is for contributors who want to customize the project.
 
 
 ### Requirements
@@ -23,7 +23,22 @@
 ```
 Environment: `GH_MIRROR` (default `https://gh-proxy.com/`), `SDK_MIRROR` (default `https://mirrors.cloud.tencent.com/AndroidSDK/`), `ANDROID_SUBSYSTEM_CACHE`. Mirrors only change where bytes come from; every file is still checked against its pinned SHA-256, and the official URL is used as a fallback.
 
-Flow: check prerequisites (including the Xcode Command Line Tools) → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, and, in the full edition, the microG parts) → run `Install.command`, which builds the Mac app and installs it to `~/Applications/Android Subsystem.app`, then opens that copy. Run `Graphics-Acceptance.command` after that. The DMG's `Install aeroandroid.command` does the same thing after copying this tree to `~/aeroandroid`.
+Flow: check prerequisites (including the Xcode Command Line Tools) → download runtime → unpack a private JDK and build-tools → compile guest APKs (MacBridge, GraphicsProbe, and, in the full edition, the microG parts) → run `Install.command`, which builds the Mac app and installs it to `~/Applications/Android Subsystem.app`, then opens that copy. Run `Graphics-Acceptance.command` after that.
+
+`./build.sh` with no `--mirror` reads the public country code (`scripts/mirror.py`). Mainland China uses the China mirrors described in the README. Any other result, including a failed lookup, uses the official source.
+
+### macOS package
+
+On a Mac, after the app has been built:
+
+```bash
+AEROANDROID_UNIVERSAL=1 ./scripts/build-mac.sh   # release: one binary for Apple Silicon and Intel
+./scripts/package-pkg.sh                         # writes out/aeroandroid-<version>-macOS-universal.pkg
+```
+
+`package-pkg.sh` ad-hoc signs the app with `codesign --sign -` and builds a `.pkg` that installs it to `/Applications`. It ad-hoc signs the package the same way when `codesign` accepts a flat package. It does not notarize the package. Opening the package is expected to show Gatekeeper's unidentified-developer / unsafe warning; allow it in System Settings → Privacy & Security.
+
+The packaged app contains `scripts/install-runtime.py`. The first launch runs that script and shows a progress bar while Android components download.
 
 ### Licenses and optional extensions
 This repository remains Apache-2.0. The default build does not download or install optional Magisk,
@@ -49,4 +64,4 @@ A running VM does not resize. See [docs/MEMORY.md](docs/MEMORY.md).
 - **SDK license**: the installer shows the Android SDK license for you to accept.
 - **Disk space**: 20 GB minimum; the full edition needs more for guest data.
 - **Logs**: `~/Library/Application Support/AndroidSubsystem/logs/`; diagnostics via `scripts/collect-diagnostics.py`.
-- **Normal install**: download the official macOS DMG at https://aeroandroid.com/#download and run `Install aeroandroid.command`. It still needs `xcode-select --install`; the script downloads the runtime and builds the app.
+- **Normal install**: download the official macOS package at https://aeroandroid.com/#download. Open the `.pkg`. When macOS says it is unsafe or from an unidentified developer, allow it in System Settings → Privacy & Security. The app then downloads Android and shows a progress bar. `xcode-select --install` is still required.

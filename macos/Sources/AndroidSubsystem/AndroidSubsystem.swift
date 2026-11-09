@@ -821,31 +821,45 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
 struct AndroidSubsystemApp: App {
     @StateObject private var model = SubsystemModel()
+    @StateObject private var setup = RuntimeSetupModel()
     private let notificationDelegate = NotificationDelegate()
     var body: some Scene {
         Window(model.t("app.title"), id: "management") {
-            MainView().environmentObject(model).onAppear {
+            Group {
+                if setup.needed {
+                    RuntimeSetupView()
+                } else {
+                    MainView()
+                }
+            }.environmentObject(model).environmentObject(setup).onAppear {
                 notificationDelegate.launch = { package in model.launchPackage(package) }
                 UNUserNotificationCenter.current().delegate = notificationDelegate
                 ApkHandler.registerOnce()
                 IntelNotice.showOnce()
                 model.refreshLaunchers()
+                Task { await setup.confirmInstalledRuntime() }
             }
         }
         .commands {
             CommandGroup(after: .newItem) {
-                Button(model.t("lib.install_apk")) { model.chooseAPKs() }.keyboardShortcut("i", modifiers: .command).disabled(model.busy)
+                Button(model.t("lib.install_apk")) { model.chooseAPKs() }.keyboardShortcut("i", modifiers: .command)
+                    .disabled(model.busy || setup.needed)
             }
         }
         MenuBarExtra(model.t("app.title"), systemImage: "square.stack.3d.up") {
-            Text("Android \(model.android) · \(model.stateLabel)")
-            Divider()
-            if model.state == "running" {
-                ForEach(model.apps.prefix(15)) { app in Button(app.label) { model.launch(app) }.disabled(model.busy) }
+            if setup.needed {
+                Text(L10n.t("setup.title"))
+                ShowManagementWindowButton()
+            } else {
+                Text("Android \(model.android) · \(model.stateLabel)")
                 Divider()
-                Button(model.t("nav.stop")) { model.stop() }.disabled(model.busy)
-            } else { Button(model.t("nav.start")) { model.boot() }.disabled(model.busy) }
-            ShowManagementWindowButton()
+                if model.state == "running" {
+                    ForEach(model.apps.prefix(15)) { app in Button(app.label) { model.launch(app) }.disabled(model.busy) }
+                    Divider()
+                    Button(model.t("nav.stop")) { model.stop() }.disabled(model.busy)
+                } else { Button(model.t("nav.start")) { model.boot() }.disabled(model.busy) }
+                ShowManagementWindowButton()
+            }
             Button(model.t("menu.quit")) { NSApp.terminate(nil) }
         }
     }

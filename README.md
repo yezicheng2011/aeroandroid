@@ -8,7 +8,7 @@
 
 <h1 align="center">aeroandroid</h1>
 <p align="center"><b>Android apps as real Mac apps, on Apple Silicon and Intel Macs.</b><br>
-Double-click an <code>.apk</code>. It installs like a <code>.dmg</code> app, shows up in Launchpad and the Dock,<br>
+Double-click an <code>.apk</code>. It installs like any other Mac app, shows up in Launchpad and the Dock,<br>
 and opens in its own window with nothing else on screen.</p>
 
 ---
@@ -34,12 +34,12 @@ window per app, plus an Android-side bridge for input, clipboard and notificatio
 
 ## Install
 
-**Download the official macOS installer** from [aeroandroid.com](https://aeroandroid.com/#download)
-(`aeroandroid-1.1.0-macOS-universal.dmg`). You do not package a release yourself: the installer downloads the runtime and builds the Mac app on your machine.
+**Download the official macOS installer** from [aeroandroid.com](https://aeroandroid.com/#download).
+The installer is a `.pkg` (this repository builds `aeroandroid-1.2.1-macOS-universal.pkg`). You do not package a release yourself.
 
 Requires a Mac (Apple Silicon, or an Intel Mac from 2018 on), macOS 14+, the Xcode Command Line Tools
-(`xcode-select --install`), about 20 GB of free disk and an internet connection. The DMG is about 1.3 MB;
-the Android runtime (about 1.8 GB) is fetched during installation from official sources, because the Android
+(`xcode-select --install`), about 20 GB of free disk and an internet connection. The package is small;
+the Android runtime (about 1.8 GB) is fetched by the app after you open it, because the Android
 SDK license does not allow redistribution.
 
 A fresh default install is **Android 17, AOSP only**: no Magisk, microG, Aurora Store or other pre-installed apps.
@@ -48,23 +48,25 @@ see [Licensing](#license) before enabling them. The external Android runtime and
 Reinstalling an existing full edition disables its Magisk boot override but keeps installed third-party APKs
 and their data; remove unwanted apps explicitly.
 
-1. Run `xcode-select --install` if you have not already. The installer builds the Mac app with Swift, so the
-   Command Line Tools are required.
-2. Open the DMG, Control-click `Install aeroandroid.command` and choose **Open**, then **Open** again.
-   On macOS 15, if it was blocked: **System Settings → Privacy & Security → Open Anyway**.
-3. Accept the Android SDK license when asked (type `YES`) and wait. The script copies the source to
-   `~/aeroandroid` and runs `build.sh`. In mainland China, type `y` at the mirror prompt, or press Return
-   and let it choose. When it finishes it opens `~/Applications/Android Subsystem.app`.
+1. Run `xcode-select --install` if you have not already. The app's Android setup uses Python 3 from the
+   Command Line Tools.
+2. Open the `.pkg`. macOS reports it as unsafe, or says it cannot verify the developer (unidentified developer).
+   That warning is expected: the package is ad-hoc signed and is not notarized.
+3. Allow it in **System Settings → Privacy & Security**, then open the package again and install it.
+   The installer asks for an administrator password and puts **Android Subsystem** in `/Applications`.
+4. Open `/Applications/Android Subsystem.app`. If macOS blocks the app the same way, allow it in
+   **System Settings → Privacy & Security** as well.
+5. The app downloads Android and shows a progress bar. It reads the Android SDK license on screen; Android
+   components download only after you accept. The download source is chosen from your public location
+   (mainland China uses a mirror; everyone else, and a failed lookup, uses the official source). You do not pick a mirror.
 
-Use that installed copy. The `Android Subsystem.app` inside the DMG is a prebuilt sample so you can confirm
-the app opens on your Mac. Do not use it as your install: its Android-side bridge is signed differently from
-the copy built on your Mac, and mixing the two fails with `Guest bridge install failed`.
-
-The installer saves a Quick Boot snapshot at the end, so the first app you open starts in seconds instead of
+The app saves a Quick Boot snapshot at the end of that setup, so the first app you open starts in seconds instead of
 cold booting (the snapshot takes disk space roughly equal to the selected memory budget).
-A memory-budget change discards the old snapshot and requires a cold boot; app data is retained. Open the installed Android
+A memory-budget change discards the old snapshot and requires a cold boot; app data is retained. Open Android
 Subsystem once: that makes the APK installer the default app for `.apk` files. From then on, double-clicking
 any APK is all it takes.
+
+An older installer may have left a copy in `~/Applications`. Use the copy in `/Applications` from this package.
 
 **Android 17** (API 37) is the only Android version: Google's stable `android-37.0` image (arm64 or x86_64) and emulator 37.2.13,
 pinned in `scripts/runtime-lock.json` (`runtime-lock-x86_64.json` for Intel). Optional root and microG
@@ -77,7 +79,7 @@ Delete them when you no longer need them.
 
 ### From source (optional, contributors)
 
-Everyday installs use the DMG above. A source zip is also on the site if you want to inspect or customize the project;
+Everyday installs use the package above. A source checkout is for contributors who want to inspect or customize the project;
 see [`BUILD.md`](BUILD.md) for contributor flags. Examples:
 
 ```bash
@@ -88,13 +90,13 @@ see [`BUILD.md`](BUILD.md) for contributor flags. Examples:
 
 ## Signing and downloads
 
-Release builds are ad-hoc signed (free, no Apple Developer ID), including the installer and the DMG. Gatekeeper
-says it cannot verify the developer. It does not say the file is damaged. Control-click `Install aeroandroid.command`
-(and, if macOS still blocks the installed app, `~/Applications/Android Subsystem.app`) and choose **Open**.
-On macOS 15 use **System Settings → Privacy & Security → Open Anyway**. If it still blocks the installed app:
+Release builds are ad-hoc signed (free, no Apple Developer account), including the app inside the package.
+The package is ad-hoc signed when `codesign` accepts it, and left unsigned when it does not. Neither case is notarized.
+Gatekeeper says the package is unsafe or that it cannot verify the developer. It does not say the file is damaged.
+Allow it in **System Settings → Privacy & Security**, then open it again. If macOS still blocks the installed app:
 
 ```bash
-xattr -dr com.apple.quarantine "$HOME/Applications/Android Subsystem.app"
+xattr -dr com.apple.quarantine "/Applications/Android Subsystem.app"
 ```
 
 Mac apps the subsystem creates for your Android apps are made and signed on your own Mac, so they open without that prompt.
@@ -121,7 +123,7 @@ One executable plays three roles, chosen by its `Info.plist`:
 
 An Intel Mac gets everything above. `build.sh` detects the chip (also in a Rosetta shell on Apple Silicon) and installs
 the x86_64 emulator, system image, JDK, scrcpy and Python, each pinned by SHA-256 in `scripts/runtime-lock-x86_64.json`.
-The release DMG is a universal binary.
+The release package contains a universal binary.
 
 **ARM translation.** Many Android apps, and most games, ship only arm64 code. The stock x86_64 Android image cannot
 run them. The default AOSP install supports apps with x86 or x86_64 code.
@@ -146,9 +148,11 @@ On an Intel Mac, the first run prints a notice, and Settings → Check runtime e
 
 ## Restricted networks (for example mainland China)
 
-Google's download servers are slow or unreachable in some countries, which would make the install fail. Pass
-`--mirror cn`, or let `build.sh` choose: when `dl.google.com` or GitHub does not answer within a few seconds, it picks
-mirrors itself.
+Google's download servers are slow or unreachable in some countries, which would make the install fail.
+The app, and `./build.sh` with its default `--mirror auto`, look up this computer's public country code
+and choose the source. Mainland China uses the mirrors below. Every other country uses the official source.
+If the lookup fails, the official source is used. You are not asked to pick a mirror.
+`./build.sh --mirror cn` still forces the mirrors.
 
 | Source | Where it goes instead |
 |--------|-----------------------|
@@ -262,4 +266,4 @@ automatic memory management.
 AOSP-only means no optional root or GPL app extensions; it does **not** mean a GPL-free runtime.
 Android includes the GPL Linux kernel, and the existing Temurin JDK is GPL-2.0 with the Classpath Exception.
 These are separate upstream components downloaded onto your Mac, not relicensed as Apache-2.0.
-The lightweight DMG does not bundle the downloaded Android runtime.
+The installer package does not bundle the downloaded Android runtime.

@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 1.2.1
+
+- Fix the in-app Android setup stopping at 93% on macOS's built-in Python (`/usr/bin/python3`, 3.9.6) with `TypeError: extractall() got an unexpected keyword argument 'filter'`. The JDK and scrcpy archives are extracted with tarfile's `data` filter when Python has it, and otherwise with an equivalent checked extraction that refuses absolute paths, `..` components, device files and links that leave the destination, and keeps executable bits and the JDK's internal symlinks.
+- Retry after a failed setup reuses the verified downloads in `~/Library/Application Support/AndroidSubsystem/download-cache` (nothing is downloaded again) and extracts over the partial install.
+- All bundled Python scripts are checked for Python 3.9 compatibility; a test covers the extraction with and without tarfile filters.
+
+## 1.2.0
+
+- The package script checks the ad-hoc signature from a saved `codesign -dv` report. Searching that report through a pipe made `package-pkg.sh` exit 141 under `pipefail`.
+
+- Distribute a macOS `.pkg` instead of a disk image. The package is ad-hoc signed when possible, and is not notarized: Gatekeeper reports an unidentified or unsafe developer, and the package is allowed in System Settings → Privacy & Security. The app installs to `/Applications`.
+- Run the Android component download from inside the app, with an on-screen progress bar. The installer script is bundled in the app. The Android SDK license is shown before the download.
+- Choose the download mirror from the public IP's country. Mainland China uses the existing China mirrors. Every other country, and a failed lookup, uses the official source. There is no mirror prompt.
 
 - Host real Android AppWidgets in retained Mac desktop windows with live updates, standard bind/configuration flows, input, saved positions and size reporting. Add a Widgets picker and independent instances; keep provider app launches in the same live surface with explicit Android Back navigation.
 - Build an original interactive widget probe in CI and test Java-to-Swift transport interoperability for small widget frames.

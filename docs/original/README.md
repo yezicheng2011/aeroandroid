@@ -2,7 +2,7 @@
 
 > **Historical.** This file describes the 0.2.0 acceptance layout. It is not the current installer.
 > The current default is Android 17, full edition (`./build.sh`). AOSP only is `./build.sh --pure`.
-> Install from the official DMG; you do not package the app yourself. See the repository README.
+> Install from the official macOS package; you do not package the app yourself. See the repository README.
 
 Goal: provide a WSA-like desktop experience for Android apps on M5 / Apple Silicon Macs. The default runtime configuration is pure AOSP Android 16 (API 36) ARM64 + persistent Magisk root + open-source microG. The new image, root and microG need to be accepted on the M5. Android 17 (API 37) is enabled only when the corresponding ARM64 system image is available, and the system never silently downgrades to Android 15 or earlier.
 

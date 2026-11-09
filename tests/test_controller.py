@@ -306,7 +306,7 @@ class IntegrationTests(unittest.TestCase):
 
     def test_a_missing_image_says_to_run_the_installer(self):
         shutil.rmtree(self.sdk / 'system-images')
-        with self.assertRaisesRegex(subsystem.SubsystemError, r'Android 17 image is missing\. Run the installer again'):
+        with self.assertRaisesRegex(subsystem.SubsystemError, r'Android 17 image is missing\. Open Android Subsystem'):
             self.controller.create()
 
     def test_invalid_inputs_and_pid_reuse(self):
@@ -521,7 +521,7 @@ class IntegrationTests(unittest.TestCase):
     def test_legacy_install_without_the_new_runtime_says_what_to_do(self):
         shutil.rmtree(self.sdk / 'system-images')
         _legacy, controller = self.legacy_install()
-        with self.assertRaisesRegex(subsystem.SubsystemError, 'Run the installer once') as caught:
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'Open Android Subsystem and install Android') as caught:
             controller.boot()
         self.assertEqual(caught.exception.code, 'runtime_upgrade_needed')
         self.assertEqual(controller.image_tag, 'google_apis')           # nothing was changed

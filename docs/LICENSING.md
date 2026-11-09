@@ -28,7 +28,7 @@ The code and assets in this repository can be released under Apache-2.0, because
   run as separate programs. The maintainer should still confirm that older code was written by them;
 - the only third-party code tracked in git is `third_party/GSFProxy` (Apache-2.0, with its license files kept);
 - everything under a stronger or different license is **downloaded onto the user's own Mac at build time**, from its
-  upstream, and is never copied into this repository or into the release DMG.
+  upstream, and is never copied into this repository or into the release package.
 
 ## What is in this repository
 
@@ -80,13 +80,13 @@ The Apache-2.0 grant covers this repository only. If you publish anything that *
 components, you take on their terms:
 
 1. **Android SDK components** (emulator, system image, build-tools): the Android SDK License does not allow you to
-   redistribute them. The release DMG leaves them out for this reason. Do not put them in an "offline package".
+   redistribute them. The release package leaves them out for this reason. Do not put them in an "offline package".
 2. **GPL components** (Magisk, Vector, microg-spoof, Aurora Store, Temurin): if you ship them, you must ship their
    license text and offer their corresponding source under GPL, and must not describe them as Apache-2.0.
 3. **Aurora Store and microG APKs**: the same, per each project's license; keep their notices.
 4. **`NOTICE`**: Apache-2.0 requires you to keep it, with the attribution lines, in any redistribution.
 
-The download users are pointed at is the official macOS DMG. It does not contain Android SDK archives, and users
+The download users are pointed at is the official macOS package. It does not contain Android SDK archives, and users
 do not package the app themselves. Do not publish an "offline package" whose `runtime-cache/` bundles those
 archives (point 1) or Magisk, Vector, or Aurora Store (point 2) unless that package is built and published within
 those terms.

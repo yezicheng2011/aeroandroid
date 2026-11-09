@@ -61,6 +61,38 @@ class EditionTests(unittest.TestCase):
             self.assertIn('create', run.call_args.args[0])
             self.assertFalse((cache / 'provision').exists())
 
+    def test_runtime_only_install_primes_without_rebuilding_the_mac_app(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'installation'; cache = Path(directory) / 'cache'
+            metadata = cache / 'sdk-macos'; metadata.mkdir(parents=True)
+            (metadata / 'repository2-3.xml').write_text('<repository><license id="android-sdk-license">Terms</license></repository>')
+            archive = cache / 'runtime.bin'; archive.write_bytes(b'runtime')
+            lock = {'android': 17, 'archives': [
+                {'relative_path': 'runtime.bin', 'kind': 'python', 'sha256': hashlib.sha256(b'runtime').hexdigest()}]}
+            java_home = root / 'runtime/java/jdk/Contents/Home'; java_home.mkdir(parents=True)
+            (root / 'config.json').write_text(json.dumps({'android': 17, 'image_tag': 'default'}))
+            with patch.object(installer, 'runtime_installed', return_value=True), \
+                 patch.object(installer, 'package_records', return_value=[]), \
+                 patch.object(installer.subprocess, 'run', return_value=Mock(returncode=0)) as run:
+                installer.install(cache, root, lock, accept_licenses=True, build=False, prime_snapshot=True)
+            commands = [' '.join(call.args[0]) for call in run.call_args_list]
+            self.assertTrue(any('create' in command for command in commands))
+            self.assertTrue(any('prime' in command for command in commands))
+            self.assertFalse(any('build-mac.sh' in command for command in commands))
+
+    def test_runtime_only_cli_skips_swift_and_asks_for_a_snapshot(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(sys, 'argv', [str(MODULE), folder, '--root', folder, '--runtime-only', '--accept-sdk-license']), \
+             patch.object(installer.platform, 'system', return_value='Darwin'), \
+             patch.object(installer.shutil, 'disk_usage', return_value=Mock(free=100 * 1024**3)), \
+             patch.object(installer.subprocess, 'run') as run, \
+             patch.object(installer, 'install') as install:
+            installer.main()
+        self.assertEqual(run.call_count, 0)
+        self.assertFalse(install.call_args.kwargs['build'])
+        self.assertTrue(install.call_args.kwargs['prime_snapshot'])
+        self.assertTrue(install.call_args.kwargs['graphics_only'])
+
 class ArchiveTests(unittest.TestCase):
     def test_valid_package_layout_and_executable_bits(self):
         with tempfile.TemporaryDirectory() as d:
