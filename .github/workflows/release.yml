@@ -74,7 +74,10 @@ jobs:
           codesign --force --timestamp=none --sign - "$app/Contents/Helpers/APK Installer.app"
           codesign --force --deep --timestamp=none --sign - "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/cs.txt
+          # Save the report before searching it. grep -q on a codesign pipe
+          # exits 141 under pipefail because codesign receives SIGPIPE.
+          codesign -dv --verbose=2 "$app" >/tmp/cs.txt 2>&1
+          cat /tmp/cs.txt
           grep -q 'Signature=adhoc' /tmp/cs.txt
       - name: Smoke test (offline launch, no runtime installed)
         run: |
@@ -101,7 +104,8 @@ jobs:
           app="$(find "$dest" -type d -name 'Android Subsystem.app' -print -quit)"
           test -n "$app"
           codesign --verify --deep --strict "$app"
-          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/cs-pkg.txt
+          codesign -dv --verbose=2 "$app" >/tmp/cs-pkg.txt 2>&1
+          cat /tmp/cs-pkg.txt
           grep -q 'Signature=adhoc' /tmp/cs-pkg.txt
           if grep -E 'Authority=Developer ID|Notarization Ticket' /tmp/cs-pkg.txt; then
             echo '::error::package app is not an ad-hoc signature'

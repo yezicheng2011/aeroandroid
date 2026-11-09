@@ -45,7 +45,10 @@ xattr -cr "$app"
 codesign --force --timestamp=none --sign - "$app/Contents/Helpers/APK Installer.app"
 codesign --force --deep --timestamp=none --sign - "$app"
 codesign --verify --deep --strict "$app"
-codesign -dv "$app" 2>&1 | grep -q 'Signature=adhoc'
+# Capture the whole codesign report, then search it. grep -q on a pipe exits
+# early, codesign gets SIGPIPE, and set -o pipefail turns that into exit 141.
+codesign -dv --verbose=2 "$app" >"$stage/codesign-app.txt" 2>&1
+grep -q 'Signature=adhoc' "$stage/codesign-app.txt"
 
 ditto "$app" "$stage/root/Android Subsystem.app"
 

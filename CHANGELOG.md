@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The package script checks the ad-hoc signature from a saved `codesign -dv` report. Searching that report through a pipe made `package-pkg.sh` exit 141 under `pipefail`.
+
 - Distribute a macOS `.pkg` instead of a disk image. The package is ad-hoc signed when possible, and is not notarized: Gatekeeper reports an unidentified or unsafe developer, and the package is allowed in System Settings → Privacy & Security. The app installs to `/Applications`.
 - Run the Android component download from inside the app, with an on-screen progress bar. The installer script is bundled in the app. The Android SDK license is shown before the download.
 - Choose the download mirror from the public IP's country. Mainland China uses the existing China mirrors. Every other country, and a failed lookup, uses the official source. There is no mirror prompt.
