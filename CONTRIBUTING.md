@@ -4,10 +4,11 @@ Issues and pull requests are welcome.
 
 ## Installers and defaults
 
-Most people should use the official macOS DMG from the
+Most people should use the official macOS package from the
 [GitHub releases](https://github.com/yezicheng2011/aeroandroid/releases) or
 https://aeroandroid.com/releases.html.
-`Install aeroandroid.command` in that DMG downloads the runtime and builds the app.
+Open the `.pkg`. macOS reports it as unsafe or from an unidentified developer; allow it in
+System Settings → Privacy & Security. The installed app downloads the Android runtime and shows a progress bar.
 It still needs the Xcode Command Line Tools (`xcode-select --install`).
 
 `./build.sh` and `./build.sh --pure` install Android 17 AOSP only by default.

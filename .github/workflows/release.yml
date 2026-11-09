@@ -1,8 +1,8 @@
 name: Desktop release
-# Builds the lightweight macOS DMG (manager app + installer + source) and publishes a GitHub Release.
-# Universal binary (Apple Silicon + Intel). Free signing only: ad-hoc codesign (no Apple Developer ID).
+# Builds the lightweight macOS pkg (the app, with the Android installer inside it) and publishes a GitHub Release.
+# Universal binary (Apple Silicon + Intel). Free signing only: ad-hoc codesign. No paid identity and no notarization.
 # The Android Emulator / SDK / system image are NOT bundled (Android SDK License §3.4 forbids
-# redistribution); the installer downloads them from Google at install time, SHA-256 pinned.
+# redistribution); the app downloads them at first launch, SHA-256 pinned.
 on:
   push:
     tags: ['v*']
@@ -88,34 +88,31 @@ jobs:
           sleep 20
           if ! kill -0 $pid 2>/dev/null; then cat /tmp/app.log; echo '::error::app exited early'; exit 1; fi
           echo "app alive after 20s (pid $pid)"; kill $pid; wait $pid || true
-      - name: Build DMG
+      - name: Build pkg
         run: |
           v="${{ steps.v.outputs.version }}"
-          mkdir -p dmgroot/aeroandroid-source out
-          git archive HEAD | tar -x -C dmgroot/aeroandroid-source
-          rm -rf dmgroot/aeroandroid-source/.github dmgroot/aeroandroid-source/packaging dmgroot/aeroandroid-source/docs/original
-          # Not needed to build or install: unit tests and the full-size logo (the app carries AppIcon.icns).
-          rm -f dmgroot/aeroandroid-source/tests/test_*.py dmgroot/aeroandroid-source/tests/fake_runtime.py dmgroot/aeroandroid-source/assets/logo-1024.png
-          ditto "dist/Android Subsystem.app" "dmgroot/Android Subsystem.app"
-          cp "packaging/dmg/Install aeroandroid.command" "packaging/dmg/README-FIRST.txt" LICENSE NOTICE dmgroot/
-          chmod +x "dmgroot/Install aeroandroid.command"
-          # No GPL parts: microg-spoof/ and third_party/Magisk/ are not in git.
-          test ! -e dmgroot/aeroandroid-source/microg-spoof && test ! -e dmgroot/aeroandroid-source/third_party/Magisk
-          xattr -cr dmgroot
-          hdiutil create -volname "aeroandroid $v" -srcfolder dmgroot -fs HFS+ -format ULMO -ov "out/aeroandroid-$v-macOS-universal.dmg"
-          # Ad-hoc sign the disk image too (free, no Apple Developer account).
-          codesign --force --timestamp=none --sign - "out/aeroandroid-$v-macOS-universal.dmg"
-          codesign --verify --verbose=2 "out/aeroandroid-$v-macOS-universal.dmg"
-          ls -l out/ | awk '{print "DMG size:", $5, "bytes", $9}'
-          mnt="$(hdiutil attach -nobrowse -readonly "out/aeroandroid-$v-macOS-universal.dmg" | awk -F'\t' '/\/Volumes\// {print $NF}' | tail -1)"
-          echo "mounted at $mnt"; ls -la "$mnt"
-          codesign --verify --deep --strict "$mnt/Android Subsystem.app"
-          lipo -info "$mnt/Android Subsystem.app/Contents/MacOS/AndroidSubsystem"
-          # Installer smoke test from the mounted image: copies source, then build.sh prints help.
-          HOME="$RUNNER_TEMP/inst-home" bash "$mnt/Install aeroandroid.command" --help
-          test -x "$RUNNER_TEMP/inst-home/aeroandroid/build.sh"
-          HOME="$RUNNER_TEMP/inst-home" bash "$RUNNER_TEMP/inst-home/aeroandroid/build.sh" --check
-          hdiutil detach "$mnt"
+          # No GPL parts are tracked: microg-spoof/ and third_party/Magisk/ stay out of the app.
+          test ! -e microg-spoof && test ! -e third_party/Magisk
+          bash scripts/package-pkg.sh
+          test -f "out/aeroandroid-$v-macOS-universal.pkg"
+          ls -l out/ | awk '{print "pkg size:", $5, "bytes", $9}'
+          dest="$RUNNER_TEMP/pkg-expanded"
+          pkgutil --expand-full "out/aeroandroid-$v-macOS-universal.pkg" "$dest"
+          app="$(find "$dest" -type d -name 'Android Subsystem.app' -print -quit)"
+          test -n "$app"
+          codesign --verify --deep --strict "$app"
+          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/cs-pkg.txt
+          grep -q 'Signature=adhoc' /tmp/cs-pkg.txt
+          if grep -E 'Authority=Developer ID|Notarization Ticket' /tmp/cs-pkg.txt; then
+            echo '::error::package app is not an ad-hoc signature'
+            exit 1
+          fi
+          lipo -info "$app/Contents/MacOS/AndroidSubsystem"
+          test -f "$app/Contents/Resources/scripts/install-runtime.py"
+          test -f "$app/Contents/Resources/scripts/mirror.py"
+          test -f "$app/Contents/Resources/scripts/setup-offline-mac.py"
+          /usr/bin/python3 "$app/Contents/Resources/scripts/install-runtime.py" --help
+          HOME="$RUNNER_TEMP/inst-home" /usr/bin/python3 "$app/Contents/Resources/scripts/install-runtime.py" status --root "$RUNNER_TEMP/inst-home/AndroidSubsystem"
       - uses: actions/upload-artifact@v4
         with: { name: macos, path: out/* }
 

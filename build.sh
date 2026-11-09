@@ -26,7 +26,11 @@ usage() {
 Usage: ./build.sh [options]
 
   --mirror cn|global|auto  Download source. cn uses a GitHub proxy and the
-                           Tencent Android SDK mirror. Default: auto (probe).
+                           Tencent Android SDK mirror. auto (the default) reads
+                           this Mac's public country code: mainland China uses
+                           that mirror, and every other country uses the official
+                           source. If the country cannot be determined, the
+                           official source is used.
   --pure                  AOSP-only edition (default): no Magisk, microG or
                            pre-installed apps. No optional GPL extensions.
   --with-gpl              Explicitly opt into Magisk, microG, Aurora Store and
@@ -93,8 +97,13 @@ check_prereqs() {
 
 pick_mirror() {
   [[ "$mirror" != auto ]] && return
-  if curl -fsI --max-time 6 https://dl.google.com/android/repository/repository2-3.xml >/dev/null 2>&1 \
-     && curl -fsI --max-time 6 https://github.com >/dev/null 2>&1; then mirror=global; else mirror=cn; fi
+  # scripts/mirror.py prints cn or global. A failed lookup, or a failed script, stays on the official source.
+  local selected
+  selected="$(python3 "$project_root/scripts/mirror.py" --choose)" || selected=global
+  case "$selected" in
+    cn|global) mirror="$selected" ;;
+    *) mirror=global ;;
+  esac
   say "Auto-selected mirror: $mirror"
 }
 

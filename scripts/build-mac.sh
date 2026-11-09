@@ -19,6 +19,14 @@ cp "$bin_path/AndroidSubsystem" "$app/Contents/MacOS/AndroidSubsystem"
 strip -x "$app/Contents/MacOS/AndroidSubsystem"   # smaller download; the app has no use for local symbols
 cp "$project_root/backend/subsystem.py" "$app/Contents/Resources/backend/"
 cp "$project_root/backend/storage_service.py" "$app/Contents/Resources/backend/"
+# The first-run Android download lives in the app. Users do not run an external installer script.
+mkdir -p "$app/Contents/Resources/scripts"
+cp "$project_root/scripts/install-runtime.py" \
+   "$project_root/scripts/mirror.py" \
+   "$project_root/scripts/setup-offline-mac.py" \
+   "$project_root/scripts/runtime-lock.json" \
+   "$project_root/scripts/runtime-lock-x86_64.json" \
+   "$app/Contents/Resources/scripts/"
 cp "$project_root/artifacts/MacBridge.apk" "$app/Contents/Resources/"
 cp "$project_root/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 render > "$app/Contents/Info.plist" <<'PLIST'

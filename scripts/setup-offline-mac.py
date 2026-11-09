@@ -199,7 +199,7 @@ def retire_old_images(root):
                   'Delete them to free disk space once you no longer need them.')
 
 
-def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=True):
+def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=True, prime_snapshot=False):
     sdk = root / 'sdk'
     runtime = root / 'runtime'
     root.mkdir(parents=True, exist_ok=True)
@@ -301,6 +301,14 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
         shutil.copytree(built, target, symlinks=True)
         subprocess.run(['/usr/bin/open', str(target)], check=True)
         print('Install complete:', target)
+    elif prime_snapshot:
+        # The Mac app is already installed (the .pkg or an existing build). Still save a
+        # Quick Boot snapshot so the first Android app opens quickly. Failure is not fatal.
+        print('Saving Quick Boot snapshot…', flush=True)
+        primed = subprocess.run([sys.executable, str(PROJECT / 'backend/subsystem.py'), 'prime'], env=env)
+        if primed.returncode:
+            print('Quick Boot snapshot was not saved; the first launch will be slower.')
+        print('Android runtime install complete.')
 
 
 def main():
@@ -313,6 +321,8 @@ def main():
                          help='Install AOSP without optional GPL extensions (default)')
     edition.add_argument('--with-gpl', dest='graphics_only', action='store_false',
                          help='Opt into Magisk, microG and pre-installed apps, including GPL extensions')
+    parser.add_argument('--runtime-only', action='store_true',
+                        help='Install the Android runtime for an app that is already built. Do not rebuild the Mac app.')
     args = parser.parse_args()
     if platform.system() != 'Darwin': raise RuntimeError('Requires a Mac')
     lock = json.loads(Path(os.environ.get('ANDROID_SUBSYSTEM_LOCK') or PROJECT / 'scripts/runtime-lock.json').read_text())
@@ -322,8 +332,10 @@ def main():
     if arm_translation_wanted(lock, args.graphics_only): required_gb += 8   # Google's image (2 GB) and a 5.5 GB working copy
     if shutil.disk_usage(args.root.parent if args.root.parent.exists() else Path.home()).free < required_gb * 1024**3:
         raise RuntimeError(f'At least {required_gb} GB free disk space is required for this installation stage')
-    subprocess.run(['/usr/bin/xcrun', '--find', 'swift'], check=True, stdout=subprocess.DEVNULL)
-    install(args.cache.resolve(), args.root.resolve(), lock, args.accept_sdk_license, graphics_only=args.graphics_only)
+    if not args.runtime_only:
+        subprocess.run(['/usr/bin/xcrun', '--find', 'swift'], check=True, stdout=subprocess.DEVNULL)
+    install(args.cache.resolve(), args.root.resolve(), lock, args.accept_sdk_license,
+            build=not args.runtime_only, graphics_only=args.graphics_only, prime_snapshot=args.runtime_only)
 
 
 if __name__ == '__main__':

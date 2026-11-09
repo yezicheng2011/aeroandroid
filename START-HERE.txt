@@ -1,28 +1,27 @@
 aeroandroid
 
-Install from the official macOS DMG. You do not package a release yourself: the installer
-downloads the runtime and builds the Mac app on your machine.
+Install from the official macOS package. You do not package a release yourself.
 Download it from the latest GitHub release or https://aeroandroid.com/releases.html
-(aeroandroid-1.1.0-macOS-universal.dmg). Open the disk image, Control-click
-"Install aeroandroid.command", and choose Open. On macOS 15, if it was blocked:
-System Settings → Privacy & Security → Open Anyway.
+(the build produces aeroandroid-1.2.0-macOS-universal.pkg).
 
-The installer is ad-hoc signed. Gatekeeper says it cannot verify the developer.
-It does not say the file is damaged.
+1. If you have not already, install the Xcode Command Line Tools: xcode-select --install
+2. Open the .pkg. macOS says it is unsafe, or that it cannot verify the developer
+   (unidentified developer). That warning is expected. The package is ad-hoc signed
+   and is not notarized.
+3. Allow it in System Settings → Privacy & Security, then open the package again.
+4. Install it. The installer puts Android Subsystem in /Applications and asks for
+   an administrator password.
+5. Open /Applications/Android Subsystem.app. If macOS blocks the app the same way,
+   allow it in System Settings → Privacy & Security.
+6. The app downloads Android and shows a progress bar. Accept the Android SDK license
+   on that screen. The download source is chosen from your public location: mainland
+   China uses a mirror; other locations, and a failed lookup, use the official source.
 
-The script copies the source to ~/aeroandroid and runs build.sh. When it finishes,
-open ~/Applications/Android Subsystem.app. That is the install. The Android
-Subsystem.app inside the DMG is only a prebuilt sample; do not use it in place of
-the installed copy.
-
-The DMG contains the manager app, the installer, and the source. The Android runtime
-(about 1.8 GB) is downloaded on your Mac during installation and checked with SHA-256.
-The Android SDK license does not allow that runtime to be redistributed inside the DMG.
+The Android runtime (about 1.8 GB) is downloaded on your Mac and checked with SHA-256.
+The Android SDK license does not allow that runtime to be redistributed inside the package.
 
 Requires a Mac (Apple Silicon, or Intel from 2018 on), macOS 14 or later, the Xcode
-Command Line Tools (xcode-select --install), about 20 GB of free disk, and a network
-connection. The installer builds the Mac app with Swift, so the Command Line Tools
-are required.
+Command Line Tools, about 20 GB of free disk, and a network connection.
 
 The default install is Android 17, AOSP only: no Magisk, microG or pre-installed apps.
 Android 17 is the only Android version. An older installation keeps its apps and data
@@ -35,6 +34,7 @@ The external Android runtime and JDK retain their own licenses, including GPL pa
 See docs/LICENSING.md; AOSP-only does not mean a GPL-free runtime.
 
 Building from a git checkout uses the same ./build.sh. See README.md and BUILD.md.
+Packaging on a Mac: ./scripts/build-mac.sh, then ./scripts/package-pkg.sh.
 
 Logs: ~/Library/Application Support/AndroidSubsystem/logs/
 If something fails, scripts/collect-diagnostics.py collects diagnostics and does not upload them.

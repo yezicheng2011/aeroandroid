@@ -260,7 +260,7 @@ class Controller:
             self.config = config
             return
         raise SubsystemError(f"This Mac still has an older Android setup, and Android {android} is not installed yet. "
-                             "Run the installer once to upgrade (open the DMG and run \"Install aeroandroid\"). "
+                             "Open Android Subsystem and install Android from the app. "
                              "Your old apps and data are kept as a backup.", code="runtime_upgrade_needed")
 
     def loaded_config(self, saved):
@@ -316,7 +316,7 @@ class Controller:
                 p = prefix / f"share/android-commandlinetools/cmdline-tools/latest/bin/{name}"
                 if p.is_file():
                     return str(p)
-        raise SubsystemError(f"Missing {name}. Run the installer again (open the DMG and run \"Install aeroandroid\").")
+        raise SubsystemError(f"Missing {name}. Open Android Subsystem and install Android from the app.")
 
     def run(self, argv, timeout=30, check=True, input=None):
         try:
@@ -468,7 +468,7 @@ class Controller:
             image = self.sdk / f"system-images/android-{self.image_api}/{self.image_tag}/{self.abi}/system.img"
             if not image.is_file():
                 raise SubsystemError(f"The Android {self.config['android']} image is missing. "
-                                     "Run the installer again (open the DMG and run \"Install aeroandroid\").")
+                                     "Open Android Subsystem and install Android from the app.")
             self.run([self.tool("avdmanager"), "--verbose", "create", "avd", "--name", self.avd,
                       "--package", f"system-images;android-{self.image_api};{self.image_tag};{self.abi}",
                       "--path", str(self.avd_home / f"{self.avd}.avd")], timeout=90, input="no\n")
@@ -1180,7 +1180,7 @@ class Controller:
         """Package name and label of an APK (the first split that is launchable), via aapt2."""
         tools = sorted(self.sdk.glob("build-tools/*/aapt2"))
         if not tools:
-            raise SubsystemError("Missing aapt2. Run the installer again (open the DMG and run \"Install aeroandroid\").")
+            raise SubsystemError("Missing aapt2. Open Android Subsystem and install Android from the app.")
         for path in files:
             out = self.run([str(tools[-1]), "dump", "badging", str(path)], timeout=60, check=False).stdout
             package = re.search(r"^package: name='([^']+)'", out, re.MULTILINE)

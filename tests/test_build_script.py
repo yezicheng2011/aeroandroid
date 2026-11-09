@@ -40,6 +40,8 @@ class BuildScriptTests(unittest.TestCase):
     def test_help_and_check_run_without_shell_errors(self):
         code, out, err = run('--help')
         self.assertEqual(code, 0); self.assertIn('--no-arm-translation', out); self.assertNoShellError(out, err)
+        self.assertIn('mainland China', out)
+        self.assertIn('official source', out)
         _code, out, err = run('--check')                # fails here (not a Mac), but must reach the prerequisite check
         self.assertIn('Checking prerequisites', out); self.assertNoShellError(out, err)
 
@@ -163,6 +165,28 @@ class PackagingTests(unittest.TestCase):
     def test_gitignore_has_no_duplicate_entries(self):
         entries = [line for line in (ROOT / '.gitignore').read_text().splitlines() if line and not line.startswith('#')]
         self.assertEqual(len(entries), len(set(entries)))
+
+    def test_the_release_is_an_adhoc_pkg_with_the_installer_inside_the_app(self):
+        package = (ROOT / 'scripts/package-pkg.sh').read_text()
+        self.assertIn('pkgbuild', package)
+        self.assertIn('productbuild', package)
+        self.assertIn('codesign --force --timestamp=none --sign -', package)
+        self.assertIn('install-runtime.py', package)
+        self.assertNotIn('hdiutil', package)
+        self.assertNotIn('notarytool', package)
+        self.assertNotIn('productsign', package)
+        self.assertNotIn('Developer ID', package)
+        bundled = (ROOT / 'scripts/build-mac.sh').read_text()
+        self.assertIn('install-runtime.py', bundled)
+        self.assertIn('mirror.py', bundled)
+        workflow = (ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('scripts/package-pkg.sh', workflow)
+        self.assertNotIn('hdiutil', workflow)
+        self.assertNotIn('.dmg', workflow)
+        self.assertNotIn('notarytool', workflow)
+        self.assertNotIn('productsign', workflow)
+        self.assertIn('@VERSION@', (ROOT / 'packaging/pkg/distribution.xml').read_text())
+        self.assertIn('Privacy', (ROOT / 'packaging/pkg/resources/welcome.html').read_text())
 
 
 if __name__ == '__main__':
