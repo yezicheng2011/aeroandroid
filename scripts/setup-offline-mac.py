@@ -2,6 +2,7 @@
 """Install locked runtime archives, without downloading software on the Mac."""
 from __future__ import annotations
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -152,9 +153,80 @@ def extract_zip(source, destination):
                 if mode: target.chmod(mode & 0o777)
 
 
+def _inside(root, path):
+    """True if `path` (already resolved) is `root` or below it."""
+    return path == root or path.startswith(root + os.sep)
+
+
+def _checked_tar_member(member, root):
+    """Validate one member like tarfile's 'data' filter and return a sanitized copy.
+
+    Used on Pythons without extraction filters (macOS's /usr/bin/python3 is 3.9.6).
+    Rejects absolute paths, '..' components, device files and links that leave `root`.
+    """
+    name = member.name
+    parts = name.split('/')
+    if name.startswith('/') or os.path.isabs(name) or '..' in parts:
+        raise RuntimeError(f'Unsafe path in archive: {name!r}')
+    target = os.path.realpath(os.path.join(root, name))
+    if not _inside(root, target):
+        raise RuntimeError(f'Archive member escapes the destination: {name!r}')
+    if member.ischr() or member.isblk() or member.isfifo() or member.isdev():
+        raise RuntimeError(f'Device or special file in archive: {name!r}')
+    if member.issym():
+        link = member.linkname
+        if link.startswith('/') or os.path.isabs(link):
+            raise RuntimeError(f'Absolute symlink in archive: {name!r} -> {link!r}')
+        resolved = os.path.realpath(os.path.join(os.path.dirname(os.path.join(root, name)), link))
+        if not _inside(root, resolved):
+            raise RuntimeError(f'Symlink escapes the destination: {name!r} -> {link!r}')
+    elif member.islnk():
+        link = member.linkname
+        if link.startswith('/') or os.path.isabs(link) or '..' in link.split('/'):
+            raise RuntimeError(f'Unsafe hard link in archive: {name!r} -> {link!r}')
+        if not _inside(root, os.path.realpath(os.path.join(root, link))):
+            raise RuntimeError(f'Hard link escapes the destination: {name!r} -> {link!r}')
+    elif not (member.isreg() or member.isdir()):
+        raise RuntimeError(f'Unsupported archive member type: {name!r}')
+    member = copy.copy(member)
+    # Same permission policy as the 'data' filter: no setuid/setgid/sticky, no group/other
+    # write; files keep their executable bits only if the owner may execute them.
+    mode = member.mode & 0o755
+    if member.isreg() or member.islnk():
+        if not mode & 0o100: mode &= ~0o111
+        mode |= 0o600
+    elif member.isdir():
+        mode |= 0o700
+    member.mode = mode
+    member.uid = member.gid = 0
+    member.uname = member.gname = ''
+    return member
+
+
+def _extract_tar_checked(archive, destination):
+    root = os.path.realpath(str(destination))
+    directories = []
+    for member in archive:
+        checked = _checked_tar_member(member, root)
+        target = os.path.join(root, checked.name)
+        # A retry re-extracts over an earlier partial install. Replace what is already there
+        # instead of writing through an existing link (or failing on an existing hard link).
+        if not checked.isdir() and (os.path.islink(target) or os.path.isfile(target)): os.unlink(target)
+        if checked.isdir(): directories.append(checked)
+        archive.extract(checked, root, set_attrs=not checked.isdir())
+    for directory in sorted(directories, key=lambda m: m.name, reverse=True):
+        path = os.path.join(root, directory.name)
+        if os.path.isdir(path) and not os.path.islink(path): os.chmod(path, directory.mode)
+
+
 def extract_tar(source, destination):
     destination.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(source) as t: t.extractall(destination, filter='data')
+    with tarfile.open(source) as t:
+        if hasattr(tarfile, 'data_filter'):
+            t.extractall(destination, filter='data')
+        else:
+            # Python before 3.12 (and its 3.8-3.11 security backports): macOS ships 3.9.6.
+            _extract_tar_checked(t, destination)
 
 
 def runtime_fingerprint(lock):

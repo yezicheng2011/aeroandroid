@@ -1,10 +1,13 @@
-> Release notes for 1.2.0. Changes since 1.1.0 are also listed in [CHANGELOG.md](../CHANGELOG.md).
+> Release notes for 1.2.1. Changes since 1.1.0 are also listed in [CHANGELOG.md](../CHANGELOG.md).
 
-## aeroandroid 1.2.0 · macOS package (Apple Silicon + Intel)
+## aeroandroid 1.2.1 · macOS package (Apple Silicon + Intel)
 
-**Download:** `aeroandroid-1.2.0-macOS-universal.pkg` — Apple Silicon and Intel Macs (Intel: 2018 or newer), macOS 14+. Not Windows.
+**Download:** `aeroandroid-1.2.1-macOS-universal.pkg` — Apple Silicon and Intel Macs (Intel: 2018 or newer), macOS 14+. Not Windows.
 
-### What's new
+### Fixed in 1.2.1
+- **Android setup no longer fails at 93% on macOS's built-in Python.** 1.2.0 stopped while unpacking the JDK with `TypeError: extractall() got an unexpected keyword argument 'filter'`, because `/usr/bin/python3` (3.9.6) has no tarfile extraction filters. 1.2.1 unpacks safely on that Python. Files already downloaded are reused; install 1.2.1 over 1.2.0 and open the app again.
+
+### What's new in 1.2
 - **The download is a `.pkg`, not a disk image.** It installs Android Subsystem into `/Applications`. The Android installer is inside the app. There is no separate install script to run.
 - **Android downloads show a progress bar.** The first launch of the app fetches the runtime (about 1.8 GB), checks each file, and installs it. The Android SDK license is shown in the app before the download starts.
 - **The mirror is chosen from your public location.** Mainland China uses the existing China mirrors (Tencent Android SDK mirror, a GitHub proxy, and the Tsinghua and NJU F-Droid mirrors for the optional full edition). Every other country uses the official source. If the location lookup fails, the official source is used. You are not asked to pick a mirror.

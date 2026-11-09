@@ -2,7 +2,7 @@ aeroandroid
 
 Install from the official macOS package. You do not package a release yourself.
 Download it from the latest GitHub release or https://aeroandroid.com/releases.html
-(the build produces aeroandroid-1.2.0-macOS-universal.pkg).
+(the build produces aeroandroid-1.2.1-macOS-universal.pkg).
 
 1. If you have not already, install the Xcode Command Line Tools: xcode-select --install
 2. Open the .pkg. macOS says it is unsafe, or that it cannot verify the developer
