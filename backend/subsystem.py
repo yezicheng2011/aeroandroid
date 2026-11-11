@@ -653,7 +653,52 @@ class Controller:
                 "serial": self.serial, "configured": self.configured() and not self.outdated,
                 "runtime_process_active": running, "memory": self.memory_status(running),
                 "windows": self.windows(), "config": self.config, "logs": str(self.logs),
+                "adb": self.adb_endpoint(),
                 "provision": read_json(self.root / "provision-report.json", {})}
+
+    def adb_endpoint(self):
+        """How adb reaches this Android: the subsystem's own adb, the device's serial and its local address.
+
+        Reading it never starts Android and never fails. `adb` and `command` are None until an adb is installed.
+        `address` is for another adb on this Mac (`adb connect`): the emulator serves adb on its console port + 1,
+        on localhost only."""
+        try:
+            adb = self.tool("adb")
+        except SubsystemError:
+            adb = None
+        address = f"127.0.0.1:{self.config['port'] + 1}"
+        return {"adb": adb, "serial": self.serial, "address": address, "connect": f"adb connect {address}",
+                "command": f"{shlex.quote(adb)} -s {self.serial}" if adb else None}
+
+    def adb_terminal(self):
+        """A script that opens a shell in which plain `adb` talks to this Android; the Mac app opens it in Terminal.
+
+        Android is started when it is not running, so one click is enough. The script is written again on
+        every call, because the port, and with it the serial, can differ from one start to the next."""
+        self.boot()
+        endpoint = self.adb_endpoint()
+        serial = endpoint["serial"]
+        lines = ["#!/bin/bash",
+                 "# Written by aeroandroid every time it is opened; edits are lost.",
+                 "# Opens a shell in which plain `adb` talks to the Android subsystem.",
+                 # First on PATH: an adb of another version would restart the adb server the subsystem is using.
+                 f"export PATH={shlex.quote(str(Path(endpoint['adb']).parent))}:\"$PATH\"",
+                 f"export ANDROID_SERIAL={shlex.quote(serial)}",
+                 "printf '%s\\n' " + " ".join(shlex.quote(text) for text in (
+                     f"adb is connected to the Android subsystem ({serial}).",
+                     "Try:  adb shell    adb install app.apk    adb logcat", "")),
+                 "adb devices",
+                 'exec "${SHELL:-/bin/zsh}"']
+        script = self.root / "adb-terminal.command"
+        temp = script.with_name(script.name + "." + uuid.uuid4().hex + ".tmp")
+        try:
+            with os.fdopen(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700), "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            os.chmod(temp, 0o700)   # Terminal only runs a .command that is executable
+            os.replace(temp, script)
+        finally:
+            temp.unlink(missing_ok=True)
+        return {"script": str(script), **endpoint}
 
     def stop(self):
         with self.locked():
@@ -1358,7 +1403,7 @@ def dispatch(controller, action, params):
              "configure-communications": lambda: controller.configure_communications(),
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
              "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
-             "prime": lambda: controller.prime(),
+             "prime": lambda: controller.prime(), "adb-terminal": lambda: controller.adb_terminal(),
              "refresh-launchers": lambda: controller.refresh_launchers(params["app_path"], params["destination"]),
              "install-app": lambda: controller.install_app(params["files"], params["app_path"], params["destination"])}
     if action not in table:

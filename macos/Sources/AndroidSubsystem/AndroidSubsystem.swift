@@ -124,6 +124,7 @@ final class SubsystemModel: ObservableObject {
     @Published var notificationsEnabled = UserDefaults.standard.bool(forKey: "forwardNotifications")
     @Published var logsPath = ""
     @Published var memoryStatus: [String: Any] = [:]
+    @Published var adb: [String: Any] = [:]
     let backend = Backend()
     let desktopWidgets = DesktopWidgetCoordinator()
     private var polling = false
@@ -185,6 +186,7 @@ final class SubsystemModel: ObservableObject {
         android = response["android"] as? Int ?? 17
         config = response["config"] as? [String: Any] ?? [:]
         memoryStatus = response["memory"] as? [String: Any] ?? [:]
+        adb = response["adb"] as? [String: Any] ?? [:]
         logsPath = response["logs"] as? String ?? ""
         windows = Set((response["windows"] as? [String: Any] ?? [:]).keys).union(surfaceWindows.keys)
         desktopWidgets.setRunning(state == "running")
@@ -389,6 +391,25 @@ final class SubsystemModel: ObservableObject {
                 }
             }
         }
+    }
+    /// "emulator-5580 · 127.0.0.1:5581": the serial any adb on this Mac lists, and the address for `adb connect`.
+    var adbDevice: String {
+        [adb["serial"] as? String, adb["address"] as? String].compactMap { $0 }.joined(separator: " · ")
+    }
+    /// A Terminal window in which plain `adb` talks to this Android. Android is started first when it is stopped.
+    func openAdbTerminal() {
+        operation(L10n.t("prog.adb_terminal")) {
+            let wasRunning = self.state == "running"
+            let result = try await self.backend.call("adb-terminal")
+            if let script = result["script"] as? String { NSWorkspace.shared.open(URL(fileURLWithPath: script)) }
+            // Android was started here instead of with Start: give the app library its bridge, as Start does.
+            if !wasRunning { await self.installCompanionIfPresent() }
+        }
+    }
+    func copyAdbCommand() {
+        guard let command = adb["command"] as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
     }
     func diagnose() {
         operation(L10n.t("prog.diagnose")) {
@@ -686,6 +707,20 @@ struct RuntimeView: View {
                 }.disabled(model.busy || model.state != "running")
                 Text(model.t("settings.notify_hint"))
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section(model.t("settings.adb")) {
+                HStack {
+                    Text(model.t("settings.adb_device"))
+                    Spacer()
+                    Text(model.adbDevice).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                HStack {
+                    Button(model.t("settings.adb_terminal")) { model.openAdbTerminal() }.disabled(model.busy)
+                    Button(model.t("settings.adb_copy")) { model.copyAdbCommand() }
+                        .disabled((model.adb["command"] as? String) == nil)
+                }
+                Text(model.t("settings.adb_hint", model.adb["serial"] as? String ?? "emulator", model.adb["connect"] as? String ?? "adb connect"))
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Section(model.t("settings.diagnostics")) {
                 HStack {

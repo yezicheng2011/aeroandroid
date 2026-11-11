@@ -3,6 +3,7 @@ import json
 import os
 import plistlib
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import socket
@@ -219,6 +220,48 @@ class IntegrationTests(unittest.TestCase):
                 subsystem.dispatch(self.controller, action, {})
         with self.assertRaisesRegex(subsystem.SubsystemError, 'Unknown action'):
             subsystem.dispatch(self.controller, 'no-such-action', {})
+
+    def test_status_says_how_adb_reaches_android_without_starting_it(self):
+        endpoint = self.controller.status()['adb']
+        port = self.controller.config['port']
+        adb = self.sdk / 'platform-tools/adb'
+        self.assertEqual(endpoint['serial'], f'emulator-{port}')
+        self.assertEqual(endpoint['address'], f'127.0.0.1:{port + 1}')     # the emulator serves adb on its console port + 1
+        self.assertEqual(endpoint['connect'], f'adb connect 127.0.0.1:{port + 1}')
+        # The SDK lives under "Application Support": the command has to survive a paste into a shell.
+        self.assertEqual(endpoint['adb'], str(adb))
+        self.assertEqual(shlex.split(endpoint['command']), [str(adb), '-s', f'emulator-{port}'])
+        self.assertFalse(self.controller.running_emulator())               # asking did not start Android
+        # Before the installer has run there is no adb to offer, and that is not an error.
+        adb.unlink()
+        with patch.object(subsystem.shutil, 'which', return_value=None):
+            missing = self.controller.status()['adb']
+        self.assertEqual((missing['adb'], missing['command'], missing['serial']), (None, None, f'emulator-{port}'))
+
+    def test_adb_terminal_starts_android_and_gives_a_shell_where_plain_adb_works(self):
+        result = self.controller.adb_terminal()
+        self.assertTrue(self.controller.running_emulator())                # one click: Android is started when needed
+        script = Path(result['script'])
+        self.assertEqual(script, self.controller.root / 'adb-terminal.command')
+        self.assertEqual(script.stat().st_mode & 0o777, 0o700)             # Terminal only runs an executable .command
+        self.assertEqual(result['serial'], self.controller.serial)
+        # Run it the way Terminal does. A stand-in for the user's shell reports what that shell would see.
+        shell = self.root / 'user-shell'
+        shell.write_text('#!/bin/sh\necho "serial=$ANDROID_SERIAL"\necho "adb=$(command -v adb)"\nadb devices\n')
+        shell.chmod(0o755)
+        done = subprocess.run([str(script)], capture_output=True, text=True, timeout=30,
+                              env={**os.environ, 'SHELL': str(shell), 'PATH': '/usr/bin:/bin'})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(f'serial={self.controller.serial}', done.stdout)
+        self.assertIn(f"adb={self.sdk / 'platform-tools/adb'}", done.stdout)   # the subsystem's own adb comes first
+        self.assertEqual(done.stdout.count(f'{self.controller.serial}\tdevice'), 2)   # shown on opening, and usable after
+        # The port can change from one start to the next, so the script is written again each time.
+        script.write_text('stale')
+        self.assertEqual(self.controller.adb_terminal()['script'], str(script))
+        self.assertIn(self.controller.serial, script.read_text())
+        self.assertEqual([path.name for path in self.controller.root.glob('adb-terminal*')], ['adb-terminal.command'])
+        self.assertEqual(subsystem.dispatch(self.controller, 'adb-terminal', {})['script'], str(script))
+        self.controller.stop()
 
     def test_quick_boot_is_opt_in_and_prime_clears_stale_snapshots(self):
         self.controller.boot()

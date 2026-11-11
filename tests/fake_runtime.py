@@ -88,8 +88,13 @@ elif name == 'emulator':
         sys.exit(0)
     avd = args[args.index('-avd') + 1]
     (root / 'emulator-argv.json').write_text(json.dumps(args))
-    state_path.write_text(json.dumps({'avd': avd, 'pid': os.getpid(), 'api': str(int(avd.split('_')[1]) + 20)}))
+    state_path.write_text(json.dumps({'avd': avd, 'pid': os.getpid(), 'api': str(int(avd.split('_')[1]) + 20),
+                                      'port': args[args.index('-port') + 1]}))
     while True: time.sleep(0.1)
+elif name == 'adb' and args == ['devices']:
+    # What the adb Terminal runs on opening, and what a person types there first: no -s.
+    print('List of devices attached')
+    if state_path.exists(): print('emulator-' + json.loads(state_path.read_text())['port'] + '\tdevice')
 elif name == 'adb':
     serial = args[1]
     args = args[2:]  # -s SERIAL
