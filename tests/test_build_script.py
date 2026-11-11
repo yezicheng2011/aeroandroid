@@ -53,6 +53,9 @@ class BuildScriptTests(unittest.TestCase):
             self.assertEqual(code, 2); self.assertIn(f'Android {version} is no longer supported', err)
         self.assertEqual(run('--bogus')[0], 2)
         self.assertEqual(run('--mirror', 'mars', '--check')[0], 2)
+        for option in ('--mirror', '--android'):       # the value is missing: say so; this used to exit 1 in silence
+            code, _out, err = run('--pure', option)
+            self.assertEqual(code, 2, option); self.assertIn(f'{option} needs a value', err)
 
     def test_gpl_extensions_require_explicit_opt_in(self):
         for options, expected in (([], '0'), (['--pure'], '0'), (['--with-gpl'], '1'),

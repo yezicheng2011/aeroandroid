@@ -150,6 +150,76 @@ class IntegrationTests(unittest.TestCase):
             subsystem.icns_from_png(b'not a png')
         self.controller.stop()
 
+    def launcher_fixture(self):
+        """A built manager app, an APK and an empty Applications folder; codesign and touch are not run."""
+        passthrough = subprocess.run
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0, '', '')
+                                                    if argv[0].startswith('/usr/bin/') else passthrough(argv, **kw))
+        app = self.root / 'Android Subsystem.app'
+        (app / 'Contents/MacOS').mkdir(parents=True)
+        (app / 'Contents/MacOS/AndroidSubsystem').write_bytes(b'binary')
+        apk = self.root / 'fixture.apk'; apk.write_bytes(b'test')
+        return app, apk, self.root / 'Applications'
+
+    def test_first_apk_on_a_new_android_installs_the_guest_bridge_for_its_icon(self):
+        app, apk, apps = self.launcher_fixture()
+        # A new Android has no guest bridge: only opening an app window, sharing a folder or pressing Start in
+        # the manager installed it, and the first APK someone double-clicks comes before all of those.
+        (self.root / 'no-companion').touch()
+        launcher = Path(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'])
+        self.assertEqual((launcher / 'Contents/Resources/AppIcon.icns').read_bytes()[:4], b'icns')
+        self.assertFalse((self.root / 'no-companion').exists())
+        self.assertTrue(json.loads((self.controller.root / 'communications.json').read_text())['phone']['selected'])
+        # With the bridge installed, a failure is reported as it is: the bridge is not installed over and over.
+        with patch.object(self.controller, 'icon_from_bridge', side_effect=subsystem.SubsystemError('Invalid companion response')), \
+             patch.object(self.controller, 'install_companion_locked') as reinstall:
+            with self.assertRaisesRegex(subsystem.SubsystemError, 'Invalid companion response'):
+                self.controller.app_icon('com.example.fixture')
+        reinstall.assert_not_called()
+        self.controller.stop()
+
+    def test_a_failed_launcher_update_keeps_the_existing_mac_app_and_leaves_nothing_behind(self):
+        app, apk, apps = self.launcher_fixture()
+        launcher = Path(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'])
+        (launcher / 'Contents/MacOS/AndroidSubsystem').write_bytes(b'the app the user has')
+        signing = self.controller.runner
+
+        def update():
+            return self.controller.export_launcher('com.example.fixture', 'Fixture App', str(app), str(apps), replace=True)
+
+        def intact():
+            self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'the app the user has')
+            self.assertEqual(plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())['AndroidPackage'], 'com.example.fixture')
+            self.assertEqual(sorted(path.name for path in apps.iterdir()), ['Fixture App.app'])
+        # The icon cannot be fetched: the existing app used to be deleted before the icon was asked for.
+        with patch.object(self.controller, 'app_icon', side_effect=subsystem.SubsystemError('Mac Bridge companion unavailable')):
+            with self.assertRaisesRegex(subsystem.SubsystemError, 'companion unavailable'): update()
+        intact()
+        # Signing fails: the half-built replacement must not take the place of the working app.
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 1, '', 'codesign failed')
+                                                    if argv[0] == '/usr/bin/codesign' else signing(argv, **kw))
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'codesign failed'): update()
+        intact()
+        # The same failure for an app that has no Mac app yet leaves no unusable bundle in its place.
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'codesign failed'):
+            self.controller.export_launcher('com.example.fresh', 'Fresh App', str(app), str(apps))
+        intact()
+        # Once signing works again the update goes through and replaces the app in one step.
+        self.controller.runner = signing
+        self.assertEqual(update()['launcher'], str(launcher))
+        self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'binary')
+        self.assertEqual(sorted(path.name for path in apps.iterdir()), ['Fixture App.app'])
+        self.controller.stop()
+
+    def test_a_missing_parameter_is_named_in_the_error(self):
+        # A KeyError used to reach the user as its bare key: the whole error message was 'package'.
+        for action, missing in (('launch', 'package'), ('pull', 'remote'), ('add-widget', 'provider'),
+                                ('install-app', 'files')):
+            with self.assertRaisesRegex(subsystem.SubsystemError, f'^Missing parameter: {missing}$'):
+                subsystem.dispatch(self.controller, action, {})
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'Unknown action'):
+            subsystem.dispatch(self.controller, 'no-such-action', {})
+
     def test_quick_boot_is_opt_in_and_prime_clears_stale_snapshots(self):
         self.controller.boot()
         self.assertIn('-no-snapshot', json.loads((self.root / 'emulator-argv.json').read_text()))

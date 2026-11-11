@@ -41,14 +41,17 @@ Environment: GH_MIRROR, SDK_MIRROR, FDROID_MIRROR, ANDROID_SUBSYSTEM_CACHE.
 USAGE
 }
 
+# An option that takes a value was given last, without one. `shift 2` would end the script without a word.
+need_value() { [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; usage >&2; exit 2; }; }
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --mirror) mirror="${2:-}"; shift 2 ;;
+    --mirror) need_value "$@"; mirror="$2"; shift 2 ;;
     --mirror=*) mirror="${1#*=}"; shift ;;
     --with-gpl) with_gpl=1; shift ;;
     --pure) with_gpl=0; shift ;;
     --no-arm-translation) arm_translation=0; shift ;;
-    --android) android="${2:-}"; shift 2 ;;
+    --android) need_value "$@"; android="$2"; shift 2 ;;
     --android=*) android="${1#*=}"; shift ;;
     --download-only) download_only=1; shift ;;
     --check) check_only=1; shift ;;

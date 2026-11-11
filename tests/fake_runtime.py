@@ -118,6 +118,14 @@ elif name == 'adb':
         elif command[:2] == ['getprop', 'ro.product.cpu.abilist']: print('x86_64,x86')
         elif command[:3] == ['cmd', 'role', 'get-role-holders']:
             print('dev.dan.androidsubsystem')
+        elif command[:2] == ['pm', 'path']:
+            # Like the real pm: no output and a failing exit code for a package that is not installed.
+            if command[2] == 'dev.dan.androidsubsystem' and (root / 'no-companion').exists(): sys.exit(1)
+            print('package:/data/app/' + command[2] + '/base.apk')
+        elif command[0] == 'content' and (root / 'no-companion').exists():
+            # Like the real `content`: the reason goes to stderr, stdout stays empty and the exit code stays 0.
+            print('Error while accessing provider:dev.dan.androidsubsystem.bridge\n'
+                  'java.lang.IllegalStateException: Could not find provider: dev.dan.androidsubsystem.bridge', file=sys.stderr)
         elif command[:2] == ['content', 'call'] and '--method' in command and command[command.index('--method') + 1] == 'storage-config':
             print('Result: Bundle[{configured=' + ('true' if command[command.index('--arg') + 1] else 'false') + '}]')
         elif command[:2] == ['content', 'call'] and '--method' in command and command[command.index('--method') + 1] in ('widget-create', 'widget-resize', 'widget-delete'):
@@ -140,7 +148,10 @@ elif name == 'adb':
             # Like the real adb: the reason goes to stderr and the exit code says it failed.
             print('adb: failed to install game.apk: Failure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries, res=-113]', file=sys.stderr)
             sys.exit(1)
-        else: print('Success')
+        else:
+            # Installing the bridge fixture is what makes its content provider answer.
+            if args[0] == 'install' and Path(args[-1]).read_bytes() == b'ci bridge': (root / 'no-companion').unlink(missing_ok=True)
+            print('Success')
     elif args[0] == 'push': print('1 file pushed')
     elif args[0] == 'pull': (Path(args[2]) / Path(args[1]).name).write_text('android data')
 elif name == 'scrcpy':
