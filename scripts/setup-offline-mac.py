@@ -165,7 +165,11 @@ def runtime_fingerprint(lock):
 
 def runtime_installed(root, lock):
     marker = root / 'installed-runtime.json'
-    previous = json.loads(marker.read_text()) if marker.exists() else {}
+    # A marker that is missing, or was cut short by a crash or a full disk, means "install again".
+    # Failing on it would stop every later install until someone found and deleted the file.
+    try: previous = json.loads(marker.read_text())
+    except (OSError, ValueError): previous = {}
+    if not isinstance(previous, dict): previous = {}
     fingerprint = runtime_fingerprint(lock)
     return (previous.get('fingerprint') == fingerprint and
             (root / 'sdk/emulator/emulator').exists() and (root / 'runtime/bin/scrcpy').exists())
@@ -255,7 +259,9 @@ def install(cache, root, lock, accept_licenses=False, build=True, graphics_only=
     # matches. Existing users keep their SDK files, AVDs, applications and userdata.
     licenses = register_sdk_packages(package_records(cache, selected_lock), destinations)
     accept_sdk_licenses(licenses, sdk, root, accept_licenses)
-    marker.write_text(json.dumps({'fingerprint': fingerprint}, indent=2))
+    pending = marker.with_name(marker.name + '.pending')   # replace in one step, like config.json below
+    pending.write_text(json.dumps({'fingerprint': fingerprint}, indent=2))
+    pending.replace(marker)
     java_home = next((runtime / 'java').glob('*/Contents/Home'))
     config_path = root / 'config.json'
     config = json.loads(config_path.read_text()) if config_path.exists() else {}

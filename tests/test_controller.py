@@ -3,6 +3,7 @@ import json
 import os
 import plistlib
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import socket
@@ -148,6 +149,118 @@ class IntegrationTests(unittest.TestCase):
             self.controller.export_launcher('org.example.other', 'Fixture App', str(app), str(apps), replace=True)
         with self.assertRaisesRegex(subsystem.SubsystemError, '512x512'):
             subsystem.icns_from_png(b'not a png')
+        self.controller.stop()
+
+    def launcher_fixture(self):
+        """A built manager app, an APK and an empty Applications folder; codesign and touch are not run."""
+        passthrough = subprocess.run
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 0, '', '')
+                                                    if argv[0].startswith('/usr/bin/') else passthrough(argv, **kw))
+        app = self.root / 'Android Subsystem.app'
+        (app / 'Contents/MacOS').mkdir(parents=True)
+        (app / 'Contents/MacOS/AndroidSubsystem').write_bytes(b'binary')
+        apk = self.root / 'fixture.apk'; apk.write_bytes(b'test')
+        return app, apk, self.root / 'Applications'
+
+    def test_first_apk_on_a_new_android_installs_the_guest_bridge_for_its_icon(self):
+        app, apk, apps = self.launcher_fixture()
+        # A new Android has no guest bridge: only opening an app window, sharing a folder or pressing Start in
+        # the manager installed it, and the first APK someone double-clicks comes before all of those.
+        (self.root / 'no-companion').touch()
+        launcher = Path(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'])
+        self.assertEqual((launcher / 'Contents/Resources/AppIcon.icns').read_bytes()[:4], b'icns')
+        self.assertFalse((self.root / 'no-companion').exists())
+        self.assertTrue(json.loads((self.controller.root / 'communications.json').read_text())['phone']['selected'])
+        # With the bridge installed, a failure is reported as it is: the bridge is not installed over and over.
+        with patch.object(self.controller, 'icon_from_bridge', side_effect=subsystem.SubsystemError('Invalid companion response')), \
+             patch.object(self.controller, 'install_companion_locked') as reinstall:
+            with self.assertRaisesRegex(subsystem.SubsystemError, 'Invalid companion response'):
+                self.controller.app_icon('com.example.fixture')
+        reinstall.assert_not_called()
+        self.controller.stop()
+
+    def test_a_failed_launcher_update_keeps_the_existing_mac_app_and_leaves_nothing_behind(self):
+        app, apk, apps = self.launcher_fixture()
+        launcher = Path(self.controller.install_app([str(apk)], str(app), str(apps))['launcher'])
+        (launcher / 'Contents/MacOS/AndroidSubsystem').write_bytes(b'the app the user has')
+        signing = self.controller.runner
+
+        def update():
+            return self.controller.export_launcher('com.example.fixture', 'Fixture App', str(app), str(apps), replace=True)
+
+        def intact():
+            self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'the app the user has')
+            self.assertEqual(plistlib.loads((launcher / 'Contents/Info.plist').read_bytes())['AndroidPackage'], 'com.example.fixture')
+            self.assertEqual(sorted(path.name for path in apps.iterdir()), ['Fixture App.app'])
+        # The icon cannot be fetched: the existing app used to be deleted before the icon was asked for.
+        with patch.object(self.controller, 'app_icon', side_effect=subsystem.SubsystemError('Mac Bridge companion unavailable')):
+            with self.assertRaisesRegex(subsystem.SubsystemError, 'companion unavailable'): update()
+        intact()
+        # Signing fails: the half-built replacement must not take the place of the working app.
+        self.controller.runner = lambda argv, **kw: (subprocess.CompletedProcess(argv, 1, '', 'codesign failed')
+                                                    if argv[0] == '/usr/bin/codesign' else signing(argv, **kw))
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'codesign failed'): update()
+        intact()
+        # The same failure for an app that has no Mac app yet leaves no unusable bundle in its place.
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'codesign failed'):
+            self.controller.export_launcher('com.example.fresh', 'Fresh App', str(app), str(apps))
+        intact()
+        # Once signing works again the update goes through and replaces the app in one step.
+        self.controller.runner = signing
+        self.assertEqual(update()['launcher'], str(launcher))
+        self.assertEqual((launcher / 'Contents/MacOS/AndroidSubsystem').read_bytes(), b'binary')
+        self.assertEqual(sorted(path.name for path in apps.iterdir()), ['Fixture App.app'])
+        self.controller.stop()
+
+    def test_a_missing_parameter_is_named_in_the_error(self):
+        # A KeyError used to reach the user as its bare key: the whole error message was 'package'.
+        for action, missing in (('launch', 'package'), ('pull', 'remote'), ('add-widget', 'provider'),
+                                ('install-app', 'files')):
+            with self.assertRaisesRegex(subsystem.SubsystemError, f'^Missing parameter: {missing}$'):
+                subsystem.dispatch(self.controller, action, {})
+        with self.assertRaisesRegex(subsystem.SubsystemError, 'Unknown action'):
+            subsystem.dispatch(self.controller, 'no-such-action', {})
+
+    def test_status_says_how_adb_reaches_android_without_starting_it(self):
+        endpoint = self.controller.status()['adb']
+        port = self.controller.config['port']
+        adb = self.sdk / 'platform-tools/adb'
+        self.assertEqual(endpoint['serial'], f'emulator-{port}')
+        self.assertEqual(endpoint['address'], f'127.0.0.1:{port + 1}')     # the emulator serves adb on its console port + 1
+        self.assertEqual(endpoint['connect'], f'adb connect 127.0.0.1:{port + 1}')
+        # The SDK lives under "Application Support": the command has to survive a paste into a shell.
+        self.assertEqual(endpoint['adb'], str(adb))
+        self.assertEqual(shlex.split(endpoint['command']), [str(adb), '-s', f'emulator-{port}'])
+        self.assertFalse(self.controller.running_emulator())               # asking did not start Android
+        # Before the installer has run there is no adb to offer, and that is not an error.
+        adb.unlink()
+        with patch.object(subsystem.shutil, 'which', return_value=None):
+            missing = self.controller.status()['adb']
+        self.assertEqual((missing['adb'], missing['command'], missing['serial']), (None, None, f'emulator-{port}'))
+
+    def test_adb_terminal_starts_android_and_gives_a_shell_where_plain_adb_works(self):
+        result = self.controller.adb_terminal()
+        self.assertTrue(self.controller.running_emulator())                # one click: Android is started when needed
+        script = Path(result['script'])
+        self.assertEqual(script, self.controller.root / 'adb-terminal.command')
+        self.assertEqual(script.stat().st_mode & 0o777, 0o700)             # Terminal only runs an executable .command
+        self.assertEqual(result['serial'], self.controller.serial)
+        # Run it the way Terminal does. A stand-in for the user's shell reports what that shell would see.
+        shell = self.root / 'user-shell'
+        shell.write_text('#!/bin/sh\necho "serial=$ANDROID_SERIAL"\necho "adb=$(command -v adb)"\nadb devices\n')
+        shell.chmod(0o755)
+        done = subprocess.run([str(script)], capture_output=True, text=True, timeout=30,
+                              env={**os.environ, 'SHELL': str(shell), 'PATH': '/usr/bin:/bin'})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(f'serial={self.controller.serial}', done.stdout)
+        self.assertIn(f"adb={self.sdk / 'platform-tools/adb'}", done.stdout)   # the subsystem's own adb comes first
+        self.assertEqual(done.stdout.count(f'{self.controller.serial}\tdevice'), 2)   # shown on opening, and usable after
+        # The port can change from one start to the next, so the script is written again each time.
+        script.write_text('stale')
+        self.assertEqual(self.controller.adb_terminal()['script'], str(script))
+        self.assertIn(self.controller.serial, script.read_text())
+        self.assertEqual([path.name for path in self.controller.root.glob('adb-terminal*')], ['adb-terminal.command'])
+        self.assertEqual(subsystem.dispatch(self.controller, 'adb-terminal', {})['script'], str(script))
         self.controller.stop()
 
     def test_quick_boot_is_opt_in_and_prime_clears_stale_snapshots(self):

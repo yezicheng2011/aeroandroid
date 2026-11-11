@@ -19,6 +19,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -652,7 +653,52 @@ class Controller:
                 "serial": self.serial, "configured": self.configured() and not self.outdated,
                 "runtime_process_active": running, "memory": self.memory_status(running),
                 "windows": self.windows(), "config": self.config, "logs": str(self.logs),
+                "adb": self.adb_endpoint(),
                 "provision": read_json(self.root / "provision-report.json", {})}
+
+    def adb_endpoint(self):
+        """How adb reaches this Android: the subsystem's own adb, the device's serial and its local address.
+
+        Reading it never starts Android and never fails. `adb` and `command` are None until an adb is installed.
+        `address` is for another adb on this Mac (`adb connect`): the emulator serves adb on its console port + 1,
+        on localhost only."""
+        try:
+            adb = self.tool("adb")
+        except SubsystemError:
+            adb = None
+        address = f"127.0.0.1:{self.config['port'] + 1}"
+        return {"adb": adb, "serial": self.serial, "address": address, "connect": f"adb connect {address}",
+                "command": f"{shlex.quote(adb)} -s {self.serial}" if adb else None}
+
+    def adb_terminal(self):
+        """A script that opens a shell in which plain `adb` talks to this Android; the Mac app opens it in Terminal.
+
+        Android is started when it is not running, so one click is enough. The script is written again on
+        every call, because the port, and with it the serial, can differ from one start to the next."""
+        self.boot()
+        endpoint = self.adb_endpoint()
+        serial = endpoint["serial"]
+        lines = ["#!/bin/bash",
+                 "# Written by aeroandroid every time it is opened; edits are lost.",
+                 "# Opens a shell in which plain `adb` talks to the Android subsystem.",
+                 # First on PATH: an adb of another version would restart the adb server the subsystem is using.
+                 f"export PATH={shlex.quote(str(Path(endpoint['adb']).parent))}:\"$PATH\"",
+                 f"export ANDROID_SERIAL={shlex.quote(serial)}",
+                 "printf '%s\\n' " + " ".join(shlex.quote(text) for text in (
+                     f"adb is connected to the Android subsystem ({serial}).",
+                     "Try:  adb shell    adb install app.apk    adb logcat", "")),
+                 "adb devices",
+                 'exec "${SHELL:-/bin/zsh}"']
+        script = self.root / "adb-terminal.command"
+        temp = script.with_name(script.name + "." + uuid.uuid4().hex + ".tmp")
+        try:
+            with os.fdopen(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700), "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            os.chmod(temp, 0o700)   # Terminal only runs a .command that is executable
+            os.replace(temp, script)
+        finally:
+            temp.unlink(missing_ok=True)
+        return {"script": str(script), **endpoint}
 
     def stop(self):
         with self.locked():
@@ -911,6 +957,16 @@ class Controller:
         with self.locked():
             return self.communications_defaults_locked()
 
+    def companion_installed(self):
+        return self.adb("shell", "pm", "path", COMPANION, check=False).stdout.startswith("package:")
+
+    def install_companion_locked(self):
+        """Install the bundled guest bridge, while the controller lock is held."""
+        result = self.adb("install", "-r", str(self.storage_apk()), timeout=120)
+        if "Success" not in result.stdout:
+            raise SubsystemError("Guest bridge install failed: " + result.stdout)
+        self.communications_defaults_locked()
+
     def share_folder(self, path, read_only=False):
         if not isinstance(path, str) or not Path(path).is_absolute() or type(read_only) is not bool:
             raise SubsystemError("Choose an absolute folder path and a read-only setting")
@@ -1165,8 +1221,21 @@ class Controller:
             return session
 
     def app_icon(self, package):
-        """512x512 PNG of an installed app's launcher icon, rendered by the guest bridge."""
+        """512x512 PNG of an installed app's launcher icon, rendered by the guest bridge.
+
+        A new Android has no guest bridge until an app window, a shared folder or the manager's Start
+        installs it. The first APK someone double-clicks comes before all of those, so install it here."""
         package_name(package)
+        try:
+            return self.icon_from_bridge(package)
+        except SubsystemError:
+            if self.companion_installed():
+                raise
+        with self.locked():
+            self.install_companion_locked()
+        return self.icon_from_bridge(package)
+
+    def icon_from_bridge(self, package):
         result = self.adb("shell", "content", "query", "--uri", f"content://{AUTHORITY}/icon?package={package}")
         match = re.search(r"payload=([A-Za-z0-9+/=]+)", result.stdout)
         if not match:
@@ -1216,12 +1285,32 @@ class Controller:
             if read_plist(target / "Contents/Info.plist").get("AndroidPackage") == package:
                 if not replace:
                     raise SubsystemError("This launcher already exists")
-                shutil.rmtree(target)
                 break
         else:
             raise SubsystemError(f"A different app named {target.name} already exists in {folder}")
         icon = icns_from_png(self.app_icon(package))
-        contents = target / "Contents"
+        # Build the app in a hidden folder beside its destination and move it into place whole. A step that
+        # fails (no icon, codesign) then costs neither the Mac app that is already there nor leaves half of one.
+        staging = Path(tempfile.mkdtemp(prefix=".aeroandroid-", dir=folder))
+        try:
+            self.build_launcher(staging / target.name, package, label, app, binary, icon)
+            previous = staging / "replaced"   # not an .app name, so it cannot be the new bundle's own name
+            if target.exists():
+                os.rename(target, previous)
+            try:
+                os.rename(staging / target.name, target)
+            except OSError:
+                if previous.exists():
+                    os.rename(previous, target)
+                raise
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+        self.run(["/usr/bin/touch", str(target)], check=False)   # make Finder and the Dock reread the icon
+        return {"launcher": str(target)}
+
+    def build_launcher(self, bundle, package, label, app, binary, icon):
+        """Write and sign one launcher bundle at `bundle`, which must not exist yet."""
+        contents = bundle / "Contents"
         (contents / "MacOS").mkdir(parents=True)
         (contents / "Resources").mkdir()
         shutil.copy2(binary, contents / "MacOS/AndroidSubsystem")
@@ -1239,9 +1328,7 @@ class Controller:
                 "AndroidPackage": package, "SubsystemAppPath": str(app)}
         with (contents / "Info.plist").open("wb") as f:
             plistlib.dump(info, f)
-        self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(target)])
-        self.run(["/usr/bin/touch", str(target)], check=False)   # make Finder and the Dock reread the icon
-        return {"launcher": str(target)}
+        self.run(["/usr/bin/codesign", "--force", "--sign", "-", str(bundle)])
 
     def refresh_launchers(self, app_path, destination):
         """After the manager is updated, bring the Mac apps it made up to date: same binary, same version.
@@ -1286,7 +1373,15 @@ class Controller:
         return {**installed, **info, **launcher}
 
 
+class Parameters(dict):
+    """The parameters of one request. A required one that is absent is named, instead of a bare KeyError."""
+
+    def __missing__(self, key):
+        raise SubsystemError(f"Missing parameter: {key}")
+
+
 def dispatch(controller, action, params):
+    params = Parameters(params)
     table = {"diagnostic": lambda: controller.diagnostic(), "status": lambda: controller.status(),
              "configure": lambda: controller.configure(params), "create": lambda: controller.create(),
              "boot": lambda: controller.boot(), "stop": lambda: controller.stop(),
@@ -1308,7 +1403,7 @@ def dispatch(controller, action, params):
              "configure-communications": lambda: controller.configure_communications(),
              "notifications": lambda: controller.notifications(), "notification-settings": lambda: controller.notification_settings(),
              "export-launcher": lambda: controller.export_launcher(params["package"], params["label"], params["app_path"], params["destination"]),
-             "prime": lambda: controller.prime(),
+             "prime": lambda: controller.prime(), "adb-terminal": lambda: controller.adb_terminal(),
              "refresh-launchers": lambda: controller.refresh_launchers(params["app_path"], params["destination"]),
              "install-app": lambda: controller.install_app(params["files"], params["app_path"], params["destination"])}
     if action not in table:

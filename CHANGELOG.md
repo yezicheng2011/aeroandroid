@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **adb in one click.** Settings has an ADB section: **Open Terminal with adb** starts Android if needed and opens a Terminal where plain `adb shell`, `adb install` and `adb logcat` reach the subsystem (its own `adb` first on `PATH`, `ANDROID_SERIAL` set). It also shows the device's serial and local address for your own adb or Android Studio, and copies the full adb command. Before, the adb binary had to be found inside Application Support and the serial was not shown anywhere. `status` reports the same details and the new `adb-terminal` action writes the script. See `docs/ADB.md`.
+
+- **Fixes from a review of the install path:**
+  - The first APK double-clicked on a new install gets its Mac app. Building it asks the Android-side bridge for the app's icon, but nothing had installed the bridge yet (only opening an app window, sharing a folder or pressing Start did), so the install ended with "Mac Bridge companion unavailable" although the APK itself was installed. The bridge is now installed when it is missing.
+  - Updating an app no longer deletes its Mac app before the new one is ready. The old app was removed first, so a failure after that (no icon, signing) left no Mac app at all, or half of one that then blocked the name. The new app is built beside the old one and moved into place whole.
+  - A shared folder still lists when a file in it is deleted on the Mac during the listing. The whole folder used to fail with "No such file or directory".
+  - `./build.sh --mirror` or `--android` without a value says so and prints the usage. It used to exit without a word.
+  - A damaged `installed-runtime.json` (a crash or a full disk while it was written) no longer stops every later install with "Expecting value: line 1 column 1". The runtime is installed again, and the file is now written in one step.
+  - The controller names a missing request parameter ("Missing parameter: package") instead of answering with only `'package'`.
+
 - Host real Android AppWidgets in retained Mac desktop windows with live updates, standard bind/configuration flows, input, saved positions and size reporting. Add a Widgets picker and independent instances; keep provider app launches in the same live surface with explicit Android Back navigation.
 - Build an original interactive widget probe in CI and test Java-to-Swift transport interoperability for small widget frames.
 
