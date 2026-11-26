@@ -40,6 +40,22 @@ class EditionTests(unittest.TestCase):
                     installer.main()
                     self.assertEqual(install.call_args.kwargs['graphics_only'], expected)
 
+    def test_a_damaged_install_marker_means_install_again_not_a_dead_end(self):
+        lock = {'android': 17, 'archives': []}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for tool in ('sdk/emulator/emulator', 'runtime/bin/scrcpy'):
+                (root / tool).parent.mkdir(parents=True); (root / tool).touch()
+            marker = root / 'installed-runtime.json'
+            self.assertFalse(installer.runtime_installed(root, lock))            # no marker yet
+            # A crash or a full disk while the marker was written leaves it empty or cut short. Every later
+            # install then stopped with "Expecting value: line 1 column 1 (char 0)" until the file was deleted.
+            for damaged in ('', '{"fingerprint": "abc', '[]', 'null'):
+                marker.write_text(damaged)
+                self.assertFalse(installer.runtime_installed(root, lock), damaged)
+            marker.write_text(json.dumps({'fingerprint': installer.runtime_fingerprint(lock)}))
+            self.assertTrue(installer.runtime_installed(root, lock))
+
     def test_aosp_installs_from_a_cache_without_any_provisioning_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'installation'; cache = Path(directory) / 'cache'

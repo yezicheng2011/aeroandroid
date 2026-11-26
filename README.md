@@ -28,6 +28,8 @@ and opens in its own window with nothing else on screen.</p>
 6. **Android desktop widgets.** Add an app's actual Android widgets to the Mac desktop, with live updates,
    buttons and scrolling. Android handles their original interaction.
 7. **Your Mac's camera works.** Android camera apps use the Mac's physical camera.
+8. **adb in one click.** Settings opens a Terminal with `adb` already connected to the subsystem, and shows the
+   device's serial and address for your own adb or Android Studio.
 
 Under the hood it is the official Android Emulator running the AOSP Android image for your Mac's chip, with a native Metal
 window per app, plus an Android-side bridge for input, clipboard and notifications.
@@ -218,6 +220,17 @@ revokes access and leaves the files intact.
 Apps must support Android's system document picker. This does not mount Android's private app data in Finder or
 make Mac folders appear at raw `/sdcard` paths. Refresh/reopen the Android picker to see external Finder changes.
 The existing import/export folder remains available for older apps. See [docs/STORAGE.md](docs/STORAGE.md).
+
+## adb
+
+Open **Settings → ADB (for developers)** and choose **Open Terminal with adb**. Terminal opens with the
+subsystem's own `adb` already pointed at it, so `adb shell`, `adb install app.apk` and `adb logcat` work as typed.
+Android is started if it is stopped. **Copy adb command** gives the full command for scripts.
+
+The same section shows the device's serial and local address (for example `emulator-5580 · 127.0.0.1:5581`).
+Your own adb and Android Studio list the subsystem as that serial by themselves; `adb connect` with the address
+is the fallback. Use one adb version: a different one restarts the adb server and can interrupt open Android
+windows. See [docs/ADB.md](docs/ADB.md).
 
 ## Memory management
 

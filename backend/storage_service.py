@@ -185,7 +185,10 @@ class SharedFolders:
                     items = []
                     with os.scandir(descriptor) as entries:
                         for entry in entries:
-                            info = entry.stat(follow_symlinks=False)
+                            try:
+                                info = entry.stat(follow_symlinks=False)
+                            except FileNotFoundError:
+                                continue  # deleted on the Mac after the folder was read: list the rest
                             if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
                                 continue
                             child = child_document(document, entry.name)

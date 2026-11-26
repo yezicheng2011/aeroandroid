@@ -106,6 +106,23 @@ class StorageServiceTests(unittest.TestCase):
         file.write_bytes(b'updated by Finder')
         self.assertEqual(base64.b64decode(self.call('read', document=document, offset=0, size=100)['data']), b'updated by Finder')
 
+    def test_listing_survives_a_file_deleted_on_the_mac_while_it_is_read(self):
+        for name in ('a.txt', 'b.txt', 'c.txt'):
+            (self.shared / name).write_bytes(b'data')
+        folders = self.server.folders
+        describe = folders.metadata
+
+        def delete_the_rest(share, document, info, name):
+            # Finder removes the other files after the folder was read but before they are examined.
+            for other in self.shared.iterdir():
+                if other.name != name: other.unlink()
+            return describe(share, document, info, name)
+        from unittest.mock import patch
+        with patch.object(folders, 'metadata', side_effect=delete_the_rest):
+            listed = self.call('list', document=self.document)
+        self.assertEqual(len(listed), 1)   # the survivor, not ENOENT for the whole folder
+        self.assertEqual([item['name'] for item in self.call('list', document=self.document)], [listed[0]['name']])
+
     def test_random_access_writes_truncation_and_fsync_change_the_mac_file(self):
         metadata = self.call('create', parent=self.document, name='notes.txt', mime='text/plain')
         document = metadata['document']
