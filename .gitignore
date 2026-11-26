@@ -1,5 +1,6 @@
 work/
 dist/
+out/
 macos/.build/
 __pycache__/
 *.pyc
